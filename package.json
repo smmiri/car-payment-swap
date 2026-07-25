@@ -1,0 +1,42 @@
+{
+  "name": "car-payment-swap",
+  "version": "0.1.0",
+  "description": "Open-source Canadian vehicle payment swap calculator. Compare keeping your car vs trading in for a cheaper all-in monthly cost — with province-aware taxes, EV rebates, and max-budget solve.",
+  "keywords": [
+    "car",
+    "auto-loan",
+    "trade-in",
+    "calculator",
+    "canada",
+    "ev",
+    "personal-finance"
+  ],
+  "license": "MIT",
+  "author": "Mohammad Miri",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smmiri/car-payment-swap.git"
+  },
+  "homepage": "https://swapmycar.smmiri.com/",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/configure-site-url.mjs",
+    "preview": "vite preview",
+    "test": "node --test src/lib/loan.test.js src/lib/vehicle-taxes.test.js src/lib/ev-incentives.test.js src/lib/operating-costs.test.js src/lib/overrides.test.js src/lib/model.test.js src/lib/persist-inputs.test.js src/lib/theme.test.js"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "i18next": "^26.2.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-i18next": "^17.0.8",
+    "recharts": "^2.15.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.8",
+    "@vitejs/plugin-react": "^4.5.2",
+    "tailwindcss": "^4.1.8",
+    "vite": "^6.3.5"
+  }
+}

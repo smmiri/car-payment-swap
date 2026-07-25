@@ -1,0 +1,592 @@
+/**
+ * SwapMyCar financial model.
+ *
+ * Primary metric: all-in monthly = normalized loan payment + insurance + M&O + fuel/elec.
+ * Auto loans: monthly compounding (see loan.js) — not Canadian mortgage semi-annual.
+ */
+
+import {
+  invertLoanPayment,
+  loanPayment,
+  normalizeToMonthly,
+  totalInterest,
+} from "./loan.js";
+import { resolveFieldValue, anyManualOverride } from "./overrides.js";
+import {
+  computeVehicleTaxes,
+  defaultLicensing,
+  BC_PST_TIER_BOUNDARIES,
+} from "./vehicle-taxes.js";
+import { computeEvIncentives } from "./ev-incentives.js";
+import {
+  defaultOperatingCosts,
+  sumOperatingMonthly,
+} from "./operating-costs.js";
+import { warn, info, error } from "./warning-codes.js";
+
+function fieldMode(field) {
+  if (field && typeof field === "object" && "mode" in field) return field;
+  return { mode: "auto", manual: field ?? 0 };
+}
+
+export function tradeEquity(tradeInValue, remainingBalance) {
+  return (tradeInValue || 0) - (remainingBalance || 0);
+}
+
+/**
+ * Baseline: keep current car.
+ */
+export function simulateCurrent(inputs) {
+  const { global: g, current: c } = inputs;
+  const insurance = resolveFieldValue({
+    mode: fieldMode(c.insurance).mode,
+    manual: fieldMode(c.insurance).manual,
+    computed: fieldMode(c.insurance).manual || 0,
+  });
+  const mo = resolveFieldValue({
+    mode: fieldMode(c.mo).mode,
+    manual: fieldMode(c.mo).manual,
+    computed: fieldMode(c.mo).manual || 0,
+  });
+  const fuel = resolveFieldValue({
+    mode: fieldMode(c.fuel).mode,
+    manual: fieldMode(c.fuel).manual,
+    computed: fieldMode(c.fuel).manual || 0,
+  });
+
+  const loanMonthly = normalizeToMonthly(c.payment || 0, c.freq || "monthly");
+  const operatingMonthly = sumOperatingMonthly({
+    insurance: insurance.value,
+    mo: mo.value,
+    fuel: fuel.value,
+  });
+  const allInMonthly = loanMonthly + operatingMonthly;
+
+  return {
+    loanMonthly,
+    insurance: insurance.value,
+    mo: mo.value,
+    fuel: fuel.value,
+    operatingMonthly,
+    allInMonthly,
+    vsTarget: allInMonthly - (g.targetAllInMonthly || 0),
+  };
+}
+
+/**
+ * Full simulation for one replacement scenario.
+ */
+export function simulateScenario(inputs, scenario) {
+  const g = inputs.global;
+  const current = inputs.current;
+  const sc = scenario;
+  const warnings = [];
+
+  const dealerFeesResolved = resolveFieldValue({
+    mode: fieldMode(sc.dealerFees).mode,
+    manual: fieldMode(sc.dealerFees).manual,
+    computed: 499,
+  });
+  const purchasePrice = Math.max(0, (sc.purchasePrice || 0) + (dealerFeesResolved.value || 0));
+  const stickerPrice = Math.max(0, sc.purchasePrice || 0);
+  const tradeIn = Math.max(0, sc.tradeInValue || 0);
+  const equity = tradeEquity(tradeIn, current.balance || 0);
+
+  if (equity < 0) {
+    warnings.push(
+      warn("NEGATIVE_EQUITY", "warn", { amount: Math.abs(equity) }),
+    );
+  }
+
+  const taxComputed = computeVehicleTaxes({
+    province: g.province,
+    purchasePrice,
+    tradeInValue: tradeIn,
+    channel: sc.channel || "dealer",
+    disposalMethod: sc.disposalMethod || "trade_in",
+    vehicleType: sc.vehicleType || "used_gas",
+  });
+
+  const taxesResolved = resolveFieldValue({
+    mode: fieldMode(sc.taxes).mode,
+    manual: fieldMode(sc.taxes).manual,
+    computed: taxComputed.total,
+  });
+
+  const licensingResolved = resolveFieldValue({
+    mode: fieldMode(sc.licensing).mode,
+    manual: fieldMode(sc.licensing).manual,
+    computed: defaultLicensing(g.province),
+  });
+
+  const opsDefaults = defaultOperatingCosts({
+    province: g.province,
+    vehicleType: sc.vehicleType,
+    annualKm: g.annualKm,
+    currentInsurance: fieldMode(current.insurance).manual || 180,
+    gasPerLitre:
+      fieldMode(sc.gasPrice).mode === "manual"
+        ? fieldMode(sc.gasPrice).manual
+        : null,
+    elecPerKwh:
+      fieldMode(sc.elecRate).mode === "manual"
+        ? fieldMode(sc.elecRate).manual
+        : null,
+    LPer100km:
+      !String(sc.vehicleType || "").includes("ev") &&
+      fieldMode(sc.efficiency).mode === "manual"
+        ? fieldMode(sc.efficiency).manual
+        : null,
+    kWhPer100km:
+      String(sc.vehicleType || "").includes("ev") &&
+      fieldMode(sc.efficiency).mode === "manual"
+        ? fieldMode(sc.efficiency).manual
+        : null,
+  });
+
+  const insurance = resolveFieldValue({
+    mode: fieldMode(sc.insurance).mode,
+    manual: fieldMode(sc.insurance).manual,
+    computed: opsDefaults.insurance,
+  });
+  const mo = resolveFieldValue({
+    mode: fieldMode(sc.mo).mode,
+    manual: fieldMode(sc.mo).manual,
+    computed: opsDefaults.mo,
+  });
+  const fuel = resolveFieldValue({
+    mode: fieldMode(sc.fuel).mode,
+    manual: fieldMode(sc.fuel).manual,
+    computed: opsDefaults.fuel,
+  });
+
+  const forceEvapOff =
+    fieldMode(sc.evRebateEligible).mode === "manual" &&
+    fieldMode(sc.evRebateEligible).manual === false;
+  const forceEvapOn =
+    fieldMode(sc.evRebateEligible).mode === "manual" &&
+    fieldMode(sc.evRebateEligible).manual === true;
+  const forceProvOff =
+    fieldMode(sc.provincialRebateEligible).mode === "manual" &&
+    fieldMode(sc.provincialRebateEligible).manual === false;
+  const forceProvOn =
+    fieldMode(sc.provincialRebateEligible).mode === "manual" &&
+    fieldMode(sc.provincialRebateEligible).manual === true;
+
+  const incentives = computeEvIncentives({
+    province: g.province,
+    vehicleType: sc.vehicleType,
+    purchasePrice: stickerPrice,
+    alreadyClaimedEvap: Boolean(sc.alreadyClaimedEvap),
+    includeIncomeTested: Boolean(sc.includeIncomeTestedRebates),
+    forceEligible: forceEvapOn || null,
+    forceIneligible: forceEvapOff || null,
+  });
+
+  // Provincial force flags applied separately if needed
+  if (forceProvOff) {
+    incentives.provincial.eligible = false;
+    incentives.provincial.amount = 0;
+    incentives.total = incentives.federal.amount;
+    incentives.appliedToPrincipal = incentives.total;
+  } else if (forceProvOn && incentives.provincial.amount === 0) {
+    const boosted = computeEvIncentives({
+      province: g.province,
+      vehicleType: sc.vehicleType,
+      purchasePrice: stickerPrice,
+      includeIncomeTested: true,
+      forceEligible: true,
+    });
+    incentives.provincial = boosted.provincial;
+    incentives.total = incentives.federal.amount + incentives.provincial.amount;
+    incentives.appliedToPrincipal = incentives.total;
+  }
+
+  if (
+    String(sc.vehicleType || "").includes("ev") &&
+    !incentives.federal.eligible &&
+    incentives.federal.reasons.includes("price_cap")
+  ) {
+    warnings.push(
+      warn("REBATE_INELIGIBLE", "warn", {
+        reason: "EVAP price cap ($50,000)",
+        price: stickerPrice,
+      }),
+    );
+  }
+  if (sc.alreadyClaimedEvap) {
+    warnings.push(info("EVAP_ALREADY_CLAIMED"));
+  }
+
+  const taxes = taxesResolved.value;
+  const licensing = licensingResolved.value;
+  const financeTaxes = sc.financeTaxes !== false;
+
+  const negativeEquity = Math.max(0, -equity);
+  const positiveEquity = Math.max(0, equity);
+  const down = Math.max(0, sc.downPayment || 0);
+
+  let amountFinancedComputed =
+    purchasePrice +
+    (financeTaxes ? taxes : 0) +
+    licensing +
+    negativeEquity -
+    down -
+    positiveEquity -
+    (incentives.appliedToPrincipal || 0);
+  amountFinancedComputed = Math.max(0, amountFinancedComputed);
+
+  const amountFinanced = resolveFieldValue({
+    mode: fieldMode(sc.amountFinanced).mode,
+    manual: fieldMode(sc.amountFinanced).manual,
+    computed: amountFinancedComputed,
+  });
+
+  const paymentComputed = loanPayment(
+    amountFinanced.value,
+    sc.apr || 0,
+    sc.termMonths || 60,
+    sc.paymentFreq || "monthly",
+  );
+  const paymentResolved = resolveFieldValue({
+    mode: fieldMode(sc.loanPayment).mode,
+    manual: fieldMode(sc.loanPayment).manual,
+    computed: paymentComputed,
+  });
+
+  const loanMonthly = normalizeToMonthly(
+    paymentResolved.value,
+    sc.paymentFreq || "monthly",
+  );
+  const operatingMonthly = sumOperatingMonthly({
+    insurance: insurance.value,
+    mo: mo.value,
+    fuel: fuel.value,
+  });
+  const allInMonthly = loanMonthly + operatingMonthly;
+  const target = g.targetAllInMonthly || 0;
+  const vsTarget = allInMonthly - target;
+
+  const cashToClose =
+    down +
+    Math.max(0, -equity) +
+    (financeTaxes ? 0 : taxes) +
+    (financeTaxes ? 0 : licensing);
+
+  const interest = totalInterest(
+    amountFinanced.value,
+    sc.apr || 0,
+    sc.termMonths || 60,
+    sc.paymentFreq || "monthly",
+  );
+
+  if (vsTarget > 1) {
+    warnings.push(
+      warn("OVER_TARGET", "warn", { over: vsTarget, allIn: allInMonthly, target }),
+    );
+  }
+  if ((sc.termMonths || 0) > 84) {
+    warnings.push(warn("LONG_TERM", "info", { months: sc.termMonths }));
+  }
+  if (taxComputed.luxuryTax > 0) {
+    warnings.push(
+      warn("LUXURY_TAX", "info", { amount: taxComputed.luxuryTax }),
+    );
+  }
+  if (g.province === "BC") {
+    const near = BC_PST_TIER_BOUNDARIES.some(
+      (b) => Math.abs(purchasePrice - b) <= 2_000,
+    );
+    if (near) warnings.push(info("BC_PST_TIER_NEAR", { price: purchasePrice }));
+  }
+
+  const modes = {
+    taxes: taxesResolved,
+    licensing: licensingResolved,
+    insurance,
+    mo,
+    fuel,
+    amountFinanced,
+    loanPayment: paymentResolved,
+    dealerFees: dealerFeesResolved,
+  };
+  if (anyManualOverride(modes)) {
+    warnings.push(info("MANUAL_OVERRIDE_ACTIVE"));
+  }
+
+  return {
+    scenarioId: sc.id,
+    name: sc.name,
+    purchasePrice: stickerPrice,
+    purchasePriceWithFees: purchasePrice,
+    tradeInValue: tradeIn,
+    tradeEquity: equity,
+    taxes,
+    taxBreakdown: taxComputed,
+    tradeInTaxSaved: taxComputed.tradeInTaxSaved,
+    licensing,
+    rebates: incentives,
+    amountFinanced: amountFinanced.value,
+    loanPayment: paymentResolved.value,
+    loanMonthly,
+    insurance: insurance.value,
+    mo: mo.value,
+    fuel: fuel.value,
+    operatingMonthly,
+    allInMonthly,
+    vsTarget,
+    cashToClose: Math.max(0, cashToClose),
+    totalInterest: interest,
+    financeTaxes,
+    modes,
+    warnings,
+    derivedFromOverride: Object.fromEntries(
+      Object.entries(modes).map(([k, v]) => [k, Boolean(v.derivedFromOverride)]),
+    ),
+  };
+}
+
+/**
+ * Amount financed as a function of sticker purchase price P (for max-budget solve).
+ */
+export function amountFinancedAtPrice(inputs, scenario, stickerPrice) {
+  const g = inputs.global;
+  const current = inputs.current;
+  const sc = { ...scenario, purchasePrice: stickerPrice };
+  const dealerFees =
+    fieldMode(sc.dealerFees).mode === "manual"
+      ? fieldMode(sc.dealerFees).manual
+      : 499;
+  const purchasePrice = Math.max(0, stickerPrice + (dealerFees || 0));
+  const tradeIn = Math.max(0, sc.tradeInValue || 0);
+  const equity = tradeEquity(tradeIn, current.balance || 0);
+  const taxes = computeVehicleTaxes({
+    province: g.province,
+    purchasePrice,
+    tradeInValue: tradeIn,
+    channel: sc.channel || "dealer",
+    disposalMethod: sc.disposalMethod || "trade_in",
+    vehicleType: sc.vehicleType || "used_gas",
+  }).total;
+  const licensing =
+    fieldMode(sc.licensing).mode === "manual"
+      ? fieldMode(sc.licensing).manual
+      : defaultLicensing(g.province);
+  const incentives = computeEvIncentives({
+    province: g.province,
+    vehicleType: sc.vehicleType,
+    purchasePrice: stickerPrice,
+    alreadyClaimedEvap: Boolean(sc.alreadyClaimedEvap),
+    includeIncomeTested: Boolean(sc.includeIncomeTestedRebates),
+  });
+  const financeTaxes = sc.financeTaxes !== false;
+  const negativeEquity = Math.max(0, -equity);
+  const positiveEquity = Math.max(0, equity);
+  const down = Math.max(0, sc.downPayment || 0);
+  return Math.max(
+    0,
+    purchasePrice +
+      (financeTaxes ? taxes : 0) +
+      licensing +
+      negativeEquity -
+      down -
+      positiveEquity -
+      incentives.appliedToPrincipal,
+  );
+}
+
+/**
+ * Reverse-solve max pre-tax purchase price for target all-in monthly.
+ */
+export function solveMaxBudget(inputs, scenario) {
+  const g = inputs.global;
+  const sc = scenario;
+  const target = g.targetAllInMonthly || 0;
+
+  const opsDefaults = defaultOperatingCosts({
+    province: g.province,
+    vehicleType: sc.vehicleType,
+    annualKm: g.annualKm,
+    currentInsurance: fieldMode(inputs.current.insurance).manual || 180,
+  });
+  const insurance = resolveFieldValue({
+    mode: fieldMode(sc.insurance).mode,
+    manual: fieldMode(sc.insurance).manual,
+    computed: opsDefaults.insurance,
+  }).value;
+  const mo = resolveFieldValue({
+    mode: fieldMode(sc.mo).mode,
+    manual: fieldMode(sc.mo).manual,
+    computed: opsDefaults.mo,
+  }).value;
+  const fuel = resolveFieldValue({
+    mode: fieldMode(sc.fuel).mode,
+    manual: fieldMode(sc.fuel).manual,
+    computed: opsDefaults.fuel,
+  }).value;
+  const operatingMonthly = sumOperatingMonthly({ insurance, mo, fuel });
+  const maxLoanMonthly = target - operatingMonthly;
+
+  if (maxLoanMonthly <= 0) {
+    return {
+      feasible: false,
+      maxPurchasePrice: 0,
+      maxLoanPaymentMonthly: maxLoanMonthly,
+      maxAmountFinanced: 0,
+      operatingMonthly,
+      bindingConstraint: "OPERATING_EXCEEDS_TARGET",
+      impliedAllInMonthly: operatingMonthly,
+      error: "OPERATING_EXCEEDS_TARGET",
+    };
+  }
+
+  // Invert using payment at the scenario frequency (auto loan monthly compounding).
+  const paymentAtFreq =
+    (maxLoanMonthly * 12) /
+    (sc.paymentFreq === "weekly" ? 52 : sc.paymentFreq === "biweekly" ? 26 : 12);
+
+  const maxAmountFinanced = invertLoanPayment(
+    paymentAtFreq,
+    sc.apr || 0,
+    sc.termMonths || 60,
+    sc.paymentFreq || "monthly",
+  );
+
+  // Binary search sticker price P
+  let lo = 0;
+  let hi = 250_000;
+  let best = 0;
+  let bindingConstraint = "loan_payment_room";
+
+  for (let i = 0; i < 48; i++) {
+    const mid = (lo + hi) / 2;
+    const financed = amountFinancedAtPrice(inputs, sc, mid);
+    if (financed <= maxAmountFinanced) {
+      best = mid;
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  // Check EVAP cap proximity / PST tier jumps
+  const incentivesAtBest = computeEvIncentives({
+    province: g.province,
+    vehicleType: sc.vehicleType,
+    purchasePrice: best,
+    alreadyClaimedEvap: Boolean(sc.alreadyClaimedEvap),
+    includeIncomeTested: Boolean(sc.includeIncomeTestedRebates),
+  });
+  if (
+    String(sc.vehicleType || "").includes("ev") &&
+    best >= 50_000 &&
+    !incentivesAtBest.federal.eligible
+  ) {
+    bindingConstraint = "EVAP_PRICE_CAP";
+  }
+  if (g.province === "BC") {
+    for (const b of BC_PST_TIER_BOUNDARIES) {
+      if (Math.abs(best - b) < 500) {
+        bindingConstraint = `PST_TIER_NEAR_${b}`;
+        break;
+      }
+    }
+  }
+
+  const sim = simulateScenario(inputs, { ...sc, purchasePrice: Math.round(best) });
+
+  return {
+    feasible: true,
+    maxPurchasePrice: Math.round(best),
+    maxLoanPaymentMonthly: maxLoanMonthly,
+    maxAmountFinanced,
+    operatingMonthly,
+    bindingConstraint,
+    impliedAllInMonthly: sim.allInMonthly,
+    paymentAtFreq,
+  };
+}
+
+/**
+ * Resolve a scenario's effective purchase price. When `priceMode === "solved"`
+ * the price tracks the scenario's own max-affordable budget, so changing the
+ * trade-in (or any other assumption) auto-updates the purchase price.
+ *
+ * Note: this does not recurse — `solveMaxBudget` solves for the price directly
+ * and only calls `simulateScenario` (which ignores `priceMode`).
+ */
+export function resolveEffectiveScenario(inputs, scenario) {
+  if (!scenario || scenario.priceMode !== "solved") return scenario;
+  const mb = solveMaxBudget(inputs, scenario);
+  if (!mb.feasible) return scenario;
+  return { ...scenario, purchasePrice: mb.maxPurchasePrice, priceSolved: true };
+}
+
+/**
+ * Compare all scenarios + current + max budget for active scenario.
+ */
+export function compareScenarios(inputs) {
+  const current = simulateCurrent(inputs);
+  const scenarios = (inputs.scenarios || []).map((sc) =>
+    simulateScenario(inputs, resolveEffectiveScenario(inputs, sc)),
+  );
+
+  const activeId = inputs.activeScenarioId || scenarios[0]?.scenarioId;
+  const activeScenario =
+    (inputs.scenarios || []).find((s) => s.id === activeId) ||
+    (inputs.scenarios || [])[0];
+  const maxBudget = activeScenario
+    ? solveMaxBudget(inputs, activeScenario)
+    : null;
+
+  for (const s of scenarios) {
+    if (
+      maxBudget?.feasible &&
+      s.purchasePrice > maxBudget.maxPurchasePrice + 1
+    ) {
+      s.warnings = [
+        ...(s.warnings || []),
+        warn("OVER_MAX_BUDGET", "warn", {
+          over: s.purchasePrice - maxBudget.maxPurchasePrice,
+          max: maxBudget.maxPurchasePrice,
+        }),
+      ];
+      s.overMaxBudget = s.purchasePrice - maxBudget.maxPurchasePrice;
+    } else {
+      s.overMaxBudget = 0;
+    }
+    s.vsCurrent = current.allInMonthly - s.allInMonthly;
+    s.meetsTarget = s.allInMonthly <= (inputs.global.targetAllInMonthly || 0) + 0.5;
+  }
+
+  // Best: prefer under target with lowest all-in; else lowest all-in
+  const under = scenarios.filter((s) => s.meetsTarget);
+  const best = (under.length ? under : scenarios).slice().sort(
+    (a, b) => a.allInMonthly - b.allInMonthly,
+  )[0] || null;
+
+  const warnings = [
+    ...(maxBudget && !maxBudget.feasible
+      ? [error("OPERATING_EXCEEDS_TARGET")]
+      : []),
+    ...scenarios.flatMap((s) => s.warnings || []),
+  ];
+
+  // Deduplicate warning codes loosely
+  const seen = new Set();
+  const uniqueWarnings = warnings.filter((w) => {
+    const key = `${w.code}:${JSON.stringify(w.params || {})}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return {
+    current,
+    scenarios,
+    best,
+    maxBudget,
+    targetAllInMonthly: inputs.global.targetAllInMonthly,
+    warnings: uniqueWarnings,
+  };
+}

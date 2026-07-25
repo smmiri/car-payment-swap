@@ -1,0 +1,12 @@
+{
+  "NEGATIVE_EQUITY": "Negative equity of {{amount}} is rolled into the new loan.",
+  "OVER_TARGET": "All-in monthly is {{over}} over your target.",
+  "OVER_MAX_BUDGET": "Purchase price is {{over}} above the solved max budget ({{max}}).",
+  "REBATE_INELIGIBLE": "Federal EVAP looks ineligible ({{reason}}). Price {{price}}.",
+  "OPERATING_EXCEEDS_TARGET": "Insurance + maintenance + fuel alone exceed your target all-in monthly — no loan room left.",
+  "LONG_TERM": "Term of {{months}} months is longer than the typical 84-month ceiling.",
+  "BC_PST_TIER_NEAR": "Purchase price is near a BC PST rate tier boundary — small price changes can jump the rate.",
+  "LUXURY_TAX": "Federal luxury tax of {{amount}} applies (new vehicles over $100,000).",
+  "EVAP_ALREADY_CLAIMED": "You marked federal EVAP as already claimed — rebate set to $0.",
+  "MANUAL_OVERRIDE_ACTIVE": "One or more fields use manual overrides; downstream totals may be derived from those values."
+}

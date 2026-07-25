@@ -1,0 +1,42 @@
+{
+  "province": {
+    "label": "Province",
+    "help": "Drives vehicle taxes, licensing presets, energy prices, and EV rebates."
+  },
+  "targetAllInMonthly": {
+    "label": "Target all-in monthly",
+    "help": "Goal for loan + insurance + maintenance + fuel/electricity."
+  },
+  "annualKm": {
+    "label": "Annual kilometres",
+    "help": "Used for auto fuel/electricity estimates."
+  },
+  "balance": {
+    "label": "Remaining loan balance",
+    "help": "Payoff amount on your current car."
+  },
+  "payment": {
+    "label": "Current payment",
+    "help": "Payment amount at the frequency you select."
+  },
+  "purchasePrice": {
+    "label": "Purchase price (pre-tax)",
+    "help": "Sticker / negotiated price before tax."
+  },
+  "tradeInValue": {
+    "label": "Trade-in / sale value",
+    "help": "Value of your current car. If you trade it in at a dealer it reduces the taxable base (BC: rate still from full price); a private sale is cash only, with no tax credit."
+  },
+  "downPayment": {
+    "label": "Down payment",
+    "help": "Cash at signing (separate from positive trade equity)."
+  },
+  "apr": {
+    "label": "Financing APR",
+    "help": "Nominal annual rate. Auto loans compound monthly."
+  },
+  "termMonths": {
+    "label": "Term",
+    "help": "Loan term in months. Typical range 48–84."
+  }
+}

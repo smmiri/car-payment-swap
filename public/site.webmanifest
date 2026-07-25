@@ -1,0 +1,19 @@
+{
+  "name": "SwapMyCar",
+  "short_name": "SwapMyCar",
+  "description": "Canadian vehicle payment swap calculator. All-in monthly cost, taxes, EV rebates, max budget.",
+  "start_url": "https://swapmycar.smmiri.com/",
+  "scope": "/",
+  "display": "minimal-ui",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "lang": "en-CA",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

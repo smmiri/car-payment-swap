@@ -1,0 +1,126 @@
+{
+  "skipToContent": "Skip to content",
+  "header": {
+    "title": "SwapMyCar",
+    "methodology": "Methodology",
+    "source": "Source"
+  },
+  "hero": {
+    "badge": "Open-source · Built for Canadian auto loans",
+    "title": "Can you swap to a cheaper car?",
+    "p1": "Compare keeping your financed vehicle with replacement options. The headline number is all-in monthly cost — loan payment plus insurance, maintenance, and fuel or electricity — so a lower payment that burns more gas does not fool the math.",
+    "modelLabel": "What's in the model:",
+    "p2": "province-aware vehicle taxes (including BC PST-116 trade-in rules), EV rebates, multi-scenario trade-in ranges, field overrides, and a reverse max-budget solve for your target all-in payment."
+  },
+  "calculator": {
+    "assumptions": "Your inputs",
+    "assumptionsHint": "Change values below. Assumptions save in this browser automatically. Hover",
+    "helpIcon": "i",
+    "helpSuffix": "for help on each field.",
+    "reset": "Reset to defaults",
+    "results": "Results",
+    "resultsHint": "Updates live as you change inputs above.",
+    "global": "Global settings",
+    "current": "Current car",
+    "scenarios": "Replacement scenarios",
+    "addScenario": "Add scenario",
+    "duplicate": "Duplicate",
+    "rename": "Rename",
+    "delete": "Delete",
+    "setToMaxBudget": "Set price to max budget",
+    "autoMaxBudget": "Auto max budget",
+    "autoMaxBudgetHint": "Tracks max affordable price as trade-in and other inputs change.",
+    "compareTitle": "Scenario comparison",
+    "chartBreakdown": "All-in monthly breakdown",
+    "chartSavings": "Monthly savings vs current",
+    "auto": "Auto",
+    "manual": "Manual",
+    "override": "Override"
+  },
+  "summary": {
+    "currentAllIn": "Current all-in / mo",
+    "currentHelp": "Normalized loan payment plus insurance, maintenance, and fuel on your current car.",
+    "targetAllIn": "Target all-in / mo",
+    "targetHelp": "Your goal monthly ownership budget.",
+    "maxBudget": "Max affordable price",
+    "maxBudgetHelp": "Reverse-solved pre-tax purchase price given target all-in, operating costs, trade-in, down payment, APR, and taxes.",
+    "bestScenario": "Best scenario",
+    "bestHelp": "Lowest all-in monthly among options that meet target when possible; otherwise the cheapest all-in.",
+    "underTarget": "Under target",
+    "overTarget": "Over target",
+    "infeasible": "Operating costs alone exceed target",
+    "vsCurrent": "vs current",
+    "loanRoom": "Loan payment room"
+  },
+  "table": {
+    "scenario": "Scenario",
+    "tradeIn": "Trade-in",
+    "price": "Purchase price",
+    "allIn": "All-in / mo",
+    "vsCurrent": "vs current",
+    "vsTarget": "vs target",
+    "budgetGap": "Max budget gap",
+    "cashToClose": "Cash to close"
+  },
+  "methodology": {
+    "title": "How the math works",
+    "p1": "Everything runs in your browser; inputs never leave your device. All-in monthly cost is the sum of a frequency-normalized auto loan payment plus insurance, maintenance & repairs, and fuel or electricity.",
+    "p2": "Auto loans use monthly compounding (APR ÷ periods per year), not Canadian mortgage semi-annual compounding. Vehicle taxes follow provincial rules; BC applies PST-116 (rate from full price, tax on net after trade-in). Rules last reviewed for <strong>{{rulesDate}}</strong>.",
+    "taxTitle": "BC trade-in tax (PST-116)",
+    "taxBody": "For dealer purchases in BC, the PST rate is looked up from the full purchase price, then applied to purchase price minus trade-in. GST is 5% on the same net. Federal luxury tax (if any) uses the pre-tax price and is not reduced by trade-in. Private sales do not get a trade-in tax credit.",
+    "maxTitle": "Max budget solve",
+    "maxBody": "Operating costs are subtracted from your target all-in to get loan payment room. That payment is inverted to a max amount financed, then a binary search finds the highest pre-tax purchase price whose taxes, rebates, trade equity, and down payment produce that financed amount.",
+    "sourcesTitle": "Primary sources",
+    "disclaimer": "Not financial or tax advice. Estimates for educational sensitivity analysis. Confirm with your dealer, lender, and provincial registry."
+  },
+  "theme": {
+    "label": "Color theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "fields": {
+    "province": "Province",
+    "targetAllIn": "Target all-in monthly",
+    "targetFreq": "Target frequency",
+    "annualKm": "Annual kilometres",
+    "balance": "Remaining loan balance",
+    "payment": "Current payment",
+    "freq": "Payment frequency",
+    "purchasePrice": "Purchase price (pre-tax)",
+    "tradeIn": "Trade-in / sale value",
+    "down": "Down payment",
+    "apr": "Financing APR",
+    "term": "Term (months)",
+    "channel": "Purchase channel",
+    "disposalMethod": "Current car",
+    "vehicleType": "Vehicle type",
+    "insurance": "Insurance / mo",
+    "mo": "Maintenance & repairs / mo",
+    "fuel": "Fuel / electricity / mo",
+    "dealerFees": "Dealer fees",
+    "licensing": "Licensing (one-time)",
+    "financeTaxes": "Finance taxes into loan",
+    "alreadyEvap": "Already claimed federal EVAP"
+  },
+  "vehicleTypes": {
+    "new_gas": "New gas / hybrid",
+    "used_gas": "Used gas / hybrid",
+    "new_ev_bev": "New EV (BEV)",
+    "new_ev_phev": "New PHEV",
+    "used_ev": "Used EV"
+  },
+  "channels": {
+    "dealer": "Dealer",
+    "private": "Private sale"
+  },
+  "disposalMethods": {
+    "trade_in": "Trade in at dealer",
+    "private_sale": "Sell privately"
+  },
+  "freq": {
+    "monthly": "Monthly",
+    "biweekly": "Bi-weekly",
+    "weekly": "Weekly"
+  }
+}

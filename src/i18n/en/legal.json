@@ -1,0 +1,16 @@
+{
+  "disclaimer": "<strong>Not financial or tax advice.</strong> Simplified model for Canadian vehicle swaps: all-in monthly ownership cost, province-aware purchase taxes (including BC PST-116), EV rebates, and a reverse max-budget solve. Excludes leases, depreciation, insurer quotes, credit-score pricing, and income-tested rebate eligibility checks. Use as a sensitivity tool, not a recommendation.",
+  "navLegal": "Legal",
+  "privacy": "Privacy",
+  "terms": "Terms",
+  "github": "GitHub",
+  "author": "Mohammad Miri",
+  "mit": "MIT licensed",
+  "privacyTitle": "Privacy",
+  "privacyP1": "This calculator runs entirely in your browser. Your inputs are not sent to a server. Assumptions are stored locally under <code>smc_inputs</code> (localStorage, with a first-party cookie when the payload fits) so settings persist when you return. Use <strong>Reset to defaults</strong> to clear. No analytics or advertising trackers are used.",
+  "privacyP2": "Fonts are self-hosted in the app bundle. Theme preference is stored under <code>smc_theme</code>. If you contact the author via GitHub, that is governed by GitHub's privacy policy.",
+  "termsTitle": "Terms",
+  "termsP1": "The site and model are provided <strong>as is</strong>, without warranty. Results are estimates for educational comparison only. Tax and rebate rules were last reviewed for <strong>{{rulesDate}}</strong>; programs change. Confirm figures with a dealer, lender, or provincial registry before deciding.",
+  "termsP2": "To the fullest extent permitted by law, the authors are not liable for any loss arising from use of this tool. The open-source software is licensed under MIT (see repository).",
+  "footerMeta": "Tax & rebate model last reviewed: {{rulesDate}}. Storage key: <code>smc_inputs</code>."
+}

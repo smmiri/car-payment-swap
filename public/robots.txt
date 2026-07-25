@@ -1,0 +1,6 @@
+# SwapMyCar — Canadian vehicle payment swap calculator.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://swapmycar.smmiri.com/sitemap.xml
