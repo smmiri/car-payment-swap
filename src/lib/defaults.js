@@ -36,6 +36,8 @@ export function createScenario(overrides = {}) {
     purchasePrice: 28_000,
     tradeInValue: 16_000,
     retainedValuePercent: modeField("auto", 50),
+    targetCashAllInMonthly: 800,
+    ownershipHorizonMonths: 60,
     downPayment: 2_000,
     apr: 6.9,
     termMonths: 60,
@@ -69,8 +71,6 @@ export const DEFAULT_SCENARIO = createScenario({
 export const DEFAULT_INPUTS = {
   global: {
     province: "ON",
-    targetEconomicMonthly: 800,
-    ownershipHorizonMonths: 60,
     targetFreq: "monthly",
     annualKm: 20_000,
   },
@@ -114,14 +114,14 @@ export const FIELD_META = {
     help: "Drives vehicle taxes, licensing presets, energy prices, and EV rebates.",
     group: "global",
   },
-  targetEconomicMonthly: {
+  targetCashAllInMonthly: {
     kind: "number",
-    label: "Target economic cost / month",
+    label: "Target cash all-in / month",
     suffix: "$",
     step: 25,
     min: 0,
-    help: "Goal for net horizon ownership cost divided by your ownership horizon (includes exit equity, not just loan payment).",
-    group: "global",
+    help: "Your goal for loan payment + insurance + maintenance + fuel/electricity. Drives max-budget solve and under/over target for this scenario.",
+    group: "scenario",
   },
   ownershipHorizonMonths: {
     kind: "number",
@@ -130,8 +130,8 @@ export const FIELD_META = {
     step: 6,
     min: 12,
     max: 120,
-    help: "How long you plan to keep the vehicle before selling or trading. Drives terminal equity and economic monthly cost.",
-    group: "global",
+    help: "How long you plan to keep this vehicle. Used only for informational economic / TCO (exit equity), not for the cash target.",
+    group: "scenario",
   },
   marketValue: {
     kind: "number",
@@ -168,7 +168,16 @@ export const FIELD_META = {
     suffix: "$",
     step: 25,
     min: 0,
-    help: "Legacy field — migrated to target economic cost.",
+    help: "Legacy field — migrated to per-scenario cash target.",
+    group: "global",
+  },
+  targetEconomicMonthly: {
+    kind: "number",
+    label: "Target economic cost / month",
+    suffix: "$",
+    step: 25,
+    min: 0,
+    help: "Legacy field — migrated to per-scenario cash target.",
     group: "global",
   },
   annualKm: {

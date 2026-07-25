@@ -168,18 +168,6 @@ export default function Calculator() {
               onChange={(v) => updateGlobal({ province: v })}
               options={PROVINCE_CODES.map((c) => ({ value: c, label: tProvinces(c) }))}
             />
-            <InputField
-              name="targetEconomicMonthly"
-              value={inputs.global.targetEconomicMonthly}
-              meta={FIELD_META.targetEconomicMonthly}
-              onChange={(_, v) => updateGlobal({ targetEconomicMonthly: v })}
-            />
-            <InputField
-              name="ownershipHorizonMonths"
-              value={inputs.global.ownershipHorizonMonths}
-              meta={FIELD_META.ownershipHorizonMonths}
-              onChange={(_, v) => updateGlobal({ ownershipHorizonMonths: v })}
-            />
             <SelectField
               label={t("fields.targetFreq")}
               value={inputs.global.targetFreq}
@@ -228,7 +216,10 @@ export default function Calculator() {
               manual={inputs.current.retainedValuePercent?.manual ?? 50}
               computed={suggestedRetainedPercent({
                 vehicleAgeYears: inputs.current.vehicleAgeYears,
-                horizonMonths: inputs.global.ownershipHorizonMonths,
+                horizonMonths:
+                  activeScenario?.ownershipHorizonMonths ||
+                  results.ownershipHorizonMonths ||
+                  60,
                 isUsed: true,
               })}
               suffix="%"
@@ -252,12 +243,12 @@ export default function Calculator() {
               options={FREQ_OPTIONS.map((f) => ({ value: f, label: t(`freq.${f}`) }))}
             />
             <div className="rounded-md border border-default bg-surface-muted px-3 py-2.5 text-sm">
-              <div className="text-xs uppercase tracking-wide text-muted">{t("summary.currentEconomic")}</div>
+              <div className="text-xs uppercase tracking-wide text-muted">{t("summary.currentCash")}</div>
               <div className="text-lg font-semibold tabular-nums text-heading">
-                {fmt.formatCurrency(results.current.economicMonthly)}
+                {fmt.formatCurrency(results.current.cashAllInMonthly)}
               </div>
               <div className="mt-1 text-xs text-muted">
-                {t("summary.cashAllIn")}: {fmt.formatCurrency(results.current.cashAllInMonthly)}/mo
+                {t("summary.economicMonthly")}: {fmt.formatCurrency(results.current.economicMonthly)}/mo
               </div>
               <div className="mt-1 text-xs text-muted">
                 {t("calculator.exitValue")}:{" "}
@@ -425,6 +416,22 @@ export default function Calculator() {
                   onChange={(_, v) => updateScenario(activeScenario.id, { downPayment: v })}
                 />
                 <InputField
+                  name="targetCashAllInMonthly"
+                  value={activeScenario.targetCashAllInMonthly}
+                  meta={FIELD_META.targetCashAllInMonthly}
+                  onChange={(_, v) =>
+                    updateScenario(activeScenario.id, { targetCashAllInMonthly: v })
+                  }
+                />
+                <InputField
+                  name="ownershipHorizonMonths"
+                  value={activeScenario.ownershipHorizonMonths}
+                  meta={FIELD_META.ownershipHorizonMonths}
+                  onChange={(_, v) =>
+                    updateScenario(activeScenario.id, { ownershipHorizonMonths: v })
+                  }
+                />
+                <InputField
                   name="apr"
                   value={activeScenario.apr}
                   meta={FIELD_META.apr}
@@ -445,7 +452,7 @@ export default function Calculator() {
                     vehicleAgeYears: isUsedVehicleType(activeScenario.vehicleType)
                       ? activeScenario.vehicleAgeYears
                       : 0,
-                    horizonMonths: inputs.global.ownershipHorizonMonths,
+                    horizonMonths: activeScenario.ownershipHorizonMonths || 60,
                     isUsed: isUsedVehicleType(activeScenario.vehicleType),
                   })}
                   suffix="%"
@@ -469,7 +476,7 @@ export default function Calculator() {
                             vehicleAgeYears: isUsedVehicleType(activeScenario.vehicleType)
                               ? activeScenario.vehicleAgeYears
                               : 0,
-                            horizonMonths: inputs.global.ownershipHorizonMonths,
+                            horizonMonths: activeScenario.ownershipHorizonMonths || 60,
                             isUsed: isUsedVehicleType(activeScenario.vehicleType),
                           }),
                       ),
@@ -558,12 +565,12 @@ export default function Calculator() {
               {activeResult ? (
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5 text-sm">
                   <MiniStat
-                    label={t("summary.economicMonthly")}
-                    value={fmt.formatCurrency(activeResult.economicMonthly)}
-                  />
-                  <MiniStat
                     label={t("summary.cashAllIn")}
                     value={fmt.formatCurrency(activeResult.cashAllInMonthly)}
+                  />
+                  <MiniStat
+                    label={t("summary.economicMonthly")}
+                    value={fmt.formatCurrency(activeResult.economicMonthly)}
                   />
                   <MiniStat
                     label={t("table.terminalEquity")}

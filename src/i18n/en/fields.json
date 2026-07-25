@@ -3,13 +3,17 @@
     "label": "Province",
     "help": "Drives vehicle taxes, licensing presets, energy prices, and EV rebates."
   },
-  "targetEconomicMonthly": {
-    "label": "Target economic cost / month",
-    "help": "Goal for net horizon ownership cost divided by your ownership horizon."
+  "targetCashAllInMonthly": {
+    "label": "Target cash all-in / month",
+    "help": "Goal for loan + insurance + maintenance + fuel for this scenario. Drives max budget and under/over target."
   },
   "ownershipHorizonMonths": {
     "label": "Ownership horizon",
-    "help": "How long you plan to keep the vehicle before selling or trading."
+    "help": "How long you plan to keep this vehicle. Used only for informational economic / TCO estimates."
+  },
+  "targetEconomicMonthly": {
+    "label": "Target economic cost / month",
+    "help": "Legacy field — migrated to per-scenario cash target."
   },
   "marketValue": {
     "label": "Current market value",
@@ -25,7 +29,7 @@
   },
   "targetAllInMonthly": {
     "label": "Target all-in monthly",
-    "help": "Legacy field — migrated to target economic cost."
+    "help": "Legacy field — migrated to per-scenario cash target."
   },
   "annualKm": {
     "label": "Annual kilometres",

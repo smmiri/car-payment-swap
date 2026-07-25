@@ -1,12 +1,15 @@
 /**
  * SwapMyCar financial model.
  *
- * Primary metric: economic monthly = net horizon TCO / ownershipHorizonMonths.
- * Secondary metric: cashAllInMonthly = normalized loan payment + insurance + M&O + fuel/elec.
+ * Decision metric: cashAllInMonthly = loan payment + insurance + M&O + fuel/elec
+ *   (per-scenario targetCashAllInMonthly drives vs-target and max-budget solve).
+ * Informational: economicMonthly = net horizon TCO / ownershipHorizonMonths
+ *   (exit equity / depreciation context — not used as the cash target).
  * Auto loans: monthly compounding (see loan.js) — not Canadian mortgage semi-annual.
  */
 
 import {
+  invertLoanPayment,
   loanPayment,
   normalizeToMonthly,
   totalInterest,
@@ -32,7 +35,6 @@ import { warn, info, error } from "./warning-codes.js";
 
 function fieldMode(field) {
   if (field && typeof field === "object" && "mode" in field) return field;
-  // Legacy plain number → treat as manual so saved overrides stick.
   if (typeof field === "number" && Number.isFinite(field)) {
     return { mode: "manual", manual: field };
   }
@@ -57,6 +59,25 @@ export function resolveRetainedPercent({
   });
 }
 
+/** Per-scenario cash budget target (loan + ops). */
+export function scenarioCashTarget(scenario) {
+  if (typeof scenario?.targetCashAllInMonthly === "number") {
+    return Math.max(0, scenario.targetCashAllInMonthly);
+  }
+  return 800;
+}
+
+/** Per-scenario ownership horizon for informational TCO. */
+export function scenarioHorizonMonths(scenario) {
+  return Math.max(1, scenario?.ownershipHorizonMonths || 60);
+}
+
+function activeScenario(inputs) {
+  const list = inputs?.scenarios || [];
+  return list.find((s) => s.id === inputs.activeScenarioId) || list[0] || null;
+}
+
+/** Legacy global target readers — prefer scenario fields. */
 export function targetEconomicMonthly(global) {
   if (!global) return 0;
   if (typeof global.targetEconomicMonthly === "number") {
@@ -65,8 +86,8 @@ export function targetEconomicMonthly(global) {
   return global.targetAllInMonthly || 0;
 }
 
-export function ownershipHorizonMonths(global) {
-  return Math.max(1, global?.ownershipHorizonMonths || 60);
+export function ownershipHorizonMonths(globalOrScenario) {
+  return Math.max(1, globalOrScenario?.ownershipHorizonMonths || 60);
 }
 
 export function tradeEquity(tradeInValue, remainingBalance) {
@@ -79,7 +100,7 @@ function attachHorizonMetrics(base, horizon) {
     ...horizon,
     cashAllInMonthly: base.cashAllInMonthly,
     economicMonthly: horizon.economicMonthly,
-    vsTarget: horizon.economicMonthly - base.target,
+    vsTarget: base.cashAllInMonthly - base.target,
   };
 }
 
@@ -87,9 +108,10 @@ function attachHorizonMetrics(base, horizon) {
  * Baseline: keep current car.
  */
 export function simulateCurrent(inputs) {
-  const { global: g, current: c } = inputs;
-  const target = targetEconomicMonthly(g);
-  const horizonMonths = ownershipHorizonMonths(g);
+  const { current: c } = inputs;
+  const active = activeScenario(inputs);
+  const target = scenarioCashTarget(active);
+  const horizonMonths = scenarioHorizonMonths(active);
   const balance = Math.max(0, c.balance || 0);
   const marketValue = Math.max(0, c.marketValue ?? 0);
   const vehicleAgeYears = Math.max(0, c.vehicleAgeYears ?? 0);
@@ -170,8 +192,8 @@ export function simulateScenario(inputs, scenario) {
   const current = inputs.current;
   const sc = scenario;
   const warnings = [];
-  const target = targetEconomicMonthly(g);
-  const horizonMonths = ownershipHorizonMonths(g);
+  const target = scenarioCashTarget(sc);
+  const horizonMonths = scenarioHorizonMonths(sc);
 
   const dealerFeesResolved = resolveFieldValue({
     mode: fieldMode(sc.dealerFees).mode,
@@ -389,13 +411,13 @@ export function simulateScenario(inputs, scenario) {
     retainedPercent,
   });
 
-  const vsTarget = horizon.economicMonthly - target;
+  const vsTarget = cashAllInMonthly - target;
 
   if (vsTarget > 1) {
     warnings.push(
       warn("OVER_TARGET", "warn", {
         over: vsTarget,
-        allIn: horizon.economicMonthly,
+        allIn: cashAllInMonthly,
         target,
       }),
     );
@@ -457,6 +479,8 @@ export function simulateScenario(inputs, scenario) {
     operatingMonthly,
     cashAllInMonthly,
     economicMonthly: horizon.economicMonthly,
+    targetCashAllInMonthly: target,
+    ownershipHorizonMonths: horizonMonths,
     vehicleAgeYears,
     retainedPercent: horizon.retainedPercent,
     retainedSuggested: suggestedRetainedPercent({
@@ -538,30 +562,84 @@ export function amountFinancedAtPrice(inputs, scenario, stickerPrice) {
 }
 
 /**
- * Economic monthly for a candidate purchase price (max-budget binary search).
+ * Cash all-in monthly for a candidate purchase price (max-budget binary search).
  */
+export function cashAllInAtPrice(inputs, scenario, stickerPrice) {
+  const sim = simulateScenario(inputs, { ...scenario, purchasePrice: stickerPrice });
+  return sim.cashAllInMonthly;
+}
+
+/** @deprecated economic search helper — prefer cashAllInAtPrice */
 export function economicMonthlyAtPrice(inputs, scenario, stickerPrice) {
   const sim = simulateScenario(inputs, { ...scenario, purchasePrice: stickerPrice });
   return sim.economicMonthly;
 }
 
 /**
- * Reverse-solve max pre-tax purchase price for target economic monthly.
+ * Reverse-solve max pre-tax purchase price for the scenario's cash all-in target.
  */
 export function solveMaxBudget(inputs, scenario) {
-  const g = inputs.global;
   const sc = scenario;
-  const target = targetEconomicMonthly(g);
+  const target = scenarioCashTarget(sc);
+
+  const opsDefaults = defaultOperatingCosts({
+    province: inputs.global.province,
+    vehicleType: sc.vehicleType,
+    annualKm: inputs.global.annualKm,
+    currentInsurance: fieldMode(inputs.current.insurance).manual || 180,
+  });
+  const insurance = resolveFieldValue({
+    mode: fieldMode(sc.insurance).mode,
+    manual: fieldMode(sc.insurance).manual,
+    computed: opsDefaults.insurance,
+  }).value;
+  const mo = resolveFieldValue({
+    mode: fieldMode(sc.mo).mode,
+    manual: fieldMode(sc.mo).manual,
+    computed: opsDefaults.mo,
+  }).value;
+  const fuel = resolveFieldValue({
+    mode: fieldMode(sc.fuel).mode,
+    manual: fieldMode(sc.fuel).manual,
+    computed: opsDefaults.fuel,
+  }).value;
+  const operatingMonthly = sumOperatingMonthly({ insurance, mo, fuel });
+  const maxLoanMonthly = target - operatingMonthly;
+
+  if (maxLoanMonthly <= 0) {
+    return {
+      feasible: false,
+      maxPurchasePrice: 0,
+      maxLoanPaymentMonthly: maxLoanMonthly,
+      maxAmountFinanced: 0,
+      operatingMonthly,
+      bindingConstraint: "OPERATING_EXCEEDS_TARGET",
+      impliedCashAllInMonthly: operatingMonthly,
+      impliedEconomicMonthly: 0,
+      error: "OPERATING_EXCEEDS_TARGET",
+    };
+  }
+
+  const paymentAtFreq =
+    (maxLoanMonthly * 12) /
+    (sc.paymentFreq === "weekly" ? 52 : sc.paymentFreq === "biweekly" ? 26 : 12);
+
+  const maxAmountFinanced = invertLoanPayment(
+    paymentAtFreq,
+    sc.apr || 0,
+    sc.termMonths || 60,
+    sc.paymentFreq || "monthly",
+  );
 
   let lo = 0;
   let hi = 250_000;
   let best = 0;
-  let bindingConstraint = "economic_target";
+  let bindingConstraint = "cash_target";
 
   for (let i = 0; i < 48; i++) {
     const mid = (lo + hi) / 2;
-    const economic = economicMonthlyAtPrice(inputs, sc, mid);
-    if (economic <= target + 0.01) {
+    const financed = amountFinancedAtPrice(inputs, sc, mid);
+    if (financed <= maxAmountFinanced) {
       best = mid;
       lo = mid;
     } else {
@@ -572,20 +650,21 @@ export function solveMaxBudget(inputs, scenario) {
   const simAtBest = simulateScenario(inputs, { ...sc, purchasePrice: Math.round(best) });
 
   if (best <= 0) {
-    const minEconomic = economicMonthlyAtPrice(inputs, sc, 0);
     return {
       feasible: false,
       maxPurchasePrice: 0,
-      operatingMonthly: simAtBest.operatingMonthly,
-      bindingConstraint: "ECONOMIC_TARGET_INFEASIBLE",
-      impliedEconomicMonthly: minEconomic,
-      impliedCashAllInMonthly: simAtBest.cashAllInMonthly,
-      error: "ECONOMIC_TARGET_INFEASIBLE",
+      maxLoanPaymentMonthly: maxLoanMonthly,
+      maxAmountFinanced,
+      operatingMonthly,
+      bindingConstraint: "CASH_TARGET_INFEASIBLE",
+      impliedCashAllInMonthly: cashAllInAtPrice(inputs, sc, 0),
+      impliedEconomicMonthly: simAtBest.economicMonthly,
+      error: "CASH_TARGET_INFEASIBLE",
     };
   }
 
   const incentivesAtBest = computeEvIncentives({
-    province: g.province,
+    province: inputs.global.province,
     vehicleType: sc.vehicleType,
     purchasePrice: best,
     alreadyClaimedEvap: Boolean(sc.alreadyClaimedEvap),
@@ -598,7 +677,7 @@ export function solveMaxBudget(inputs, scenario) {
   ) {
     bindingConstraint = "EVAP_PRICE_CAP";
   }
-  if (g.province === "BC") {
+  if (inputs.global.province === "BC") {
     for (const b of BC_PST_TIER_BOUNDARIES) {
       if (Math.abs(best - b) < 500) {
         bindingConstraint = `PST_TIER_NEAR_${b}`;
@@ -610,17 +689,20 @@ export function solveMaxBudget(inputs, scenario) {
   return {
     feasible: true,
     maxPurchasePrice: Math.round(best),
-    operatingMonthly: simAtBest.operatingMonthly,
+    maxLoanPaymentMonthly: maxLoanMonthly,
+    maxAmountFinanced,
+    operatingMonthly,
     bindingConstraint,
-    impliedEconomicMonthly: simAtBest.economicMonthly,
     impliedCashAllInMonthly: simAtBest.cashAllInMonthly,
+    impliedEconomicMonthly: simAtBest.economicMonthly,
     terminalEquity: simAtBest.terminalEquity,
+    paymentAtFreq,
   };
 }
 
 /**
  * Resolve a scenario's effective purchase price. When `priceMode === "solved"`
- * the price tracks the scenario's own max-affordable budget.
+ * the price tracks the scenario's own max-affordable cash budget.
  */
 export function resolveEffectiveScenario(inputs, scenario) {
   if (!scenario || scenario.priceMode !== "solved") return scenario;
@@ -638,44 +720,43 @@ export function compareScenarios(inputs) {
     simulateScenario(inputs, resolveEffectiveScenario(inputs, sc)),
   );
 
-  const activeId = inputs.activeScenarioId || scenarios[0]?.scenarioId;
-  const activeScenario =
-    (inputs.scenarios || []).find((s) => s.id === activeId) ||
-    (inputs.scenarios || [])[0];
-  const maxBudget = activeScenario
-    ? solveMaxBudget(inputs, activeScenario)
-    : null;
-
-  const target = targetEconomicMonthly(inputs.global);
+  const active = activeScenario(inputs);
+  const maxBudget = active ? solveMaxBudget(inputs, active) : null;
+  const activeTarget = scenarioCashTarget(active);
 
   for (const s of scenarios) {
-    if (
-      maxBudget?.feasible &&
-      s.purchasePrice > maxBudget.maxPurchasePrice + 1
-    ) {
+    const ownMax = solveMaxBudget(
+      inputs,
+      (inputs.scenarios || []).find((raw) => raw.id === s.scenarioId) || active,
+    );
+    if (ownMax?.feasible && s.purchasePrice > ownMax.maxPurchasePrice + 1) {
       s.warnings = [
         ...(s.warnings || []),
         warn("OVER_MAX_BUDGET", "warn", {
-          over: s.purchasePrice - maxBudget.maxPurchasePrice,
-          max: maxBudget.maxPurchasePrice,
+          over: s.purchasePrice - ownMax.maxPurchasePrice,
+          max: ownMax.maxPurchasePrice,
         }),
       ];
-      s.overMaxBudget = s.purchasePrice - maxBudget.maxPurchasePrice;
+      s.overMaxBudget = s.purchasePrice - ownMax.maxPurchasePrice;
     } else {
       s.overMaxBudget = 0;
     }
-    s.vsCurrent = current.economicMonthly - s.economicMonthly;
-    s.meetsTarget = s.economicMonthly <= target + 0.5;
+    // Decision deltas use cash; economic vs-current kept for information.
+    s.vsCurrent = current.cashAllInMonthly - s.cashAllInMonthly;
+    s.vsCurrentEconomic = current.economicMonthly - s.economicMonthly;
+    s.meetsTarget = s.cashAllInMonthly <= scenarioCashTarget(
+      (inputs.scenarios || []).find((raw) => raw.id === s.scenarioId),
+    ) + 0.5;
   }
 
   const under = scenarios.filter((s) => s.meetsTarget);
   const best = (under.length ? under : scenarios).slice().sort(
-    (a, b) => a.economicMonthly - b.economicMonthly,
+    (a, b) => a.cashAllInMonthly - b.cashAllInMonthly,
   )[0] || null;
 
   const warnings = [
-    ...(maxBudget && !maxBudget.feasible && maxBudget.error === "ECONOMIC_TARGET_INFEASIBLE"
-      ? [error("ECONOMIC_TARGET_INFEASIBLE")]
+    ...(maxBudget && !maxBudget.feasible && maxBudget.error === "OPERATING_EXCEEDS_TARGET"
+      ? [error("OPERATING_EXCEEDS_TARGET")]
       : []),
     ...scenarios.flatMap((s) => s.warnings || []),
   ];
@@ -693,8 +774,8 @@ export function compareScenarios(inputs) {
     scenarios,
     best,
     maxBudget,
-    targetEconomicMonthly: target,
-    ownershipHorizonMonths: ownershipHorizonMonths(inputs.global),
+    targetCashAllInMonthly: activeTarget,
+    ownershipHorizonMonths: scenarioHorizonMonths(active),
     warnings: uniqueWarnings,
   };
 }

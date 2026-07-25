@@ -5,13 +5,13 @@ import { useFormat } from "../hooks/useFormat.js";
 export default function SummaryCards({ results }) {
   const { t } = useTranslation();
   const fmt = useFormat();
-  const { current, targetEconomicMonthly, maxBudget, best, ownershipHorizonMonths } = results;
+  const { current, targetCashAllInMonthly, maxBudget, best, ownershipHorizonMonths } = results;
 
   const maxLabel = maxBudget?.feasible
     ? fmt.formatCurrency(maxBudget.maxPurchasePrice)
     : t("summary.infeasible");
   const maxSub = maxBudget?.feasible
-    ? `${t("summary.economicAtMax")}: ${fmt.formatCurrency(maxBudget.impliedEconomicMonthly)}/mo`
+    ? `${t("summary.cashAtMax")}: ${fmt.formatCurrency(maxBudget.impliedCashAllInMonthly)}/mo`
     : null;
 
   const bestTone =
@@ -20,16 +20,16 @@ export default function SummaryCards({ results }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
-        label={t("summary.currentEconomic")}
-        value={fmt.formatCurrency(current.economicMonthly)}
-        sublabel={`${t("summary.cashAllIn")}: ${fmt.formatCurrency(current.cashAllInMonthly)}/mo`}
-        help={t("summary.currentEconomicHelp", { months: ownershipHorizonMonths })}
+        label={t("summary.currentCash")}
+        value={fmt.formatCurrency(current.cashAllInMonthly)}
+        sublabel={`${t("summary.economicMonthly")}: ${fmt.formatCurrency(current.economicMonthly)}/mo`}
+        help={t("summary.currentCashHelp", { months: ownershipHorizonMonths })}
         tone="neutral"
       />
       <StatCard
-        label={t("summary.targetEconomic")}
-        value={fmt.formatCurrency(targetEconomicMonthly)}
-        help={t("summary.targetEconomicHelp", { months: ownershipHorizonMonths })}
+        label={t("summary.targetCash")}
+        value={fmt.formatCurrency(targetCashAllInMonthly)}
+        help={t("summary.targetCashHelp")}
         tone="primary"
       />
       <StatCard
@@ -44,7 +44,7 @@ export default function SummaryCards({ results }) {
         value={best ? best.name : "—"}
         sublabel={
           best
-            ? `${fmt.formatCurrency(best.economicMonthly)}/mo · ${
+            ? `${fmt.formatCurrency(best.cashAllInMonthly)}/mo · ${
                 best.meetsTarget ? t("summary.underTarget") : t("summary.overTarget")
               }`
             : null

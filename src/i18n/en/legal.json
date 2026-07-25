@@ -1,5 +1,5 @@
 {
-  "disclaimer": "<strong>Not financial or tax advice.</strong> Simplified model for Canadian vehicle swaps: economic monthly ownership cost (terminal-equity TCO), province-aware purchase taxes (including BC PST-116), EV rebates, and a reverse max-budget solve. Retained value at exit is a user assumption, not a market forecast. Excludes leases, insurer quotes, credit-score pricing, and income-tested rebate eligibility checks. Use as a sensitivity tool, not a recommendation.",
+  "disclaimer": "<strong>Not financial or tax advice.</strong> Simplified model for Canadian vehicle swaps: cash all-in monthly ownership cost (decision metric), informational terminal-equity TCO, province-aware purchase taxes (including BC PST-116), EV rebates, and a reverse max-budget solve. Retained value at exit is a user assumption, not a market forecast. Excludes leases, insurer quotes, credit-score pricing, and income-tested rebate eligibility checks. Use as a sensitivity tool, not a recommendation.",
   "navLegal": "Legal",
   "privacy": "Privacy",
   "terms": "Terms",

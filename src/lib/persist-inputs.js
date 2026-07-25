@@ -48,8 +48,25 @@ function sanitizeScenario(raw, fallback) {
   if (VEHICLE_SET.has(raw.vehicleType)) out.vehicleType = raw.vehicleType;
   if (FREQ_SET.has(raw.paymentFreq)) out.paymentFreq = raw.paymentFreq;
 
-  for (const key of ["purchasePrice", "tradeInValue", "downPayment", "apr", "termMonths", "vehicleAgeYears"]) {
+  for (const key of [
+    "purchasePrice",
+    "tradeInValue",
+    "downPayment",
+    "apr",
+    "termMonths",
+    "vehicleAgeYears",
+    "targetCashAllInMonthly",
+  ]) {
     if (typeof raw[key] === "number" && Number.isFinite(raw[key])) out[key] = raw[key];
+  }
+  if (typeof out.targetCashAllInMonthly === "number") {
+    out.targetCashAllInMonthly = Math.max(0, out.targetCashAllInMonthly);
+  }
+  if (typeof raw.ownershipHorizonMonths === "number" && Number.isFinite(raw.ownershipHorizonMonths)) {
+    out.ownershipHorizonMonths = Math.min(
+      120,
+      Math.max(12, Math.round(raw.ownershipHorizonMonths)),
+    );
   }
   // Legacy plain number was a flat default, not a deliberate override — keep Auto
   // so vehicle age can drive the retained-value curve.
@@ -101,24 +118,32 @@ export function mergeSavedInputs(saved, defaults = DEFAULT_INPUTS) {
 
   const out = structuredClone(defaults);
 
+  let legacyCashTarget = null;
+  let legacyHorizon = null;
+
   if (saved.global && typeof saved.global === "object") {
     if (PROVINCE_SET.has(saved.global.province)) out.global.province = saved.global.province;
     if (
+      typeof saved.global.targetCashAllInMonthly === "number" &&
+      Number.isFinite(saved.global.targetCashAllInMonthly)
+    ) {
+      legacyCashTarget = Math.max(0, saved.global.targetCashAllInMonthly);
+    } else if (
       typeof saved.global.targetEconomicMonthly === "number" &&
       Number.isFinite(saved.global.targetEconomicMonthly)
     ) {
-      out.global.targetEconomicMonthly = saved.global.targetEconomicMonthly;
+      legacyCashTarget = Math.max(0, saved.global.targetEconomicMonthly);
     } else if (
       typeof saved.global.targetAllInMonthly === "number" &&
       Number.isFinite(saved.global.targetAllInMonthly)
     ) {
-      out.global.targetEconomicMonthly = saved.global.targetAllInMonthly;
+      legacyCashTarget = Math.max(0, saved.global.targetAllInMonthly);
     }
     if (
       typeof saved.global.ownershipHorizonMonths === "number" &&
       Number.isFinite(saved.global.ownershipHorizonMonths)
     ) {
-      out.global.ownershipHorizonMonths = Math.min(
+      legacyHorizon = Math.min(
         120,
         Math.max(12, Math.round(saved.global.ownershipHorizonMonths)),
       );
@@ -163,6 +188,33 @@ export function mergeSavedInputs(saved, defaults = DEFAULT_INPUTS) {
         return sanitizeScenario(s, templateWithoutId);
       }),
     );
+
+    // Migrate legacy global target/horizon onto scenarios that lack per-scenario values.
+    if (legacyCashTarget != null || legacyHorizon != null) {
+      out.scenarios = out.scenarios.map((sc, i) => {
+        const raw = capped[i];
+        const patch = { ...sc };
+        if (
+          legacyCashTarget != null &&
+          !Object.prototype.hasOwnProperty.call(raw || {}, "targetCashAllInMonthly")
+        ) {
+          patch.targetCashAllInMonthly = legacyCashTarget;
+        }
+        if (
+          legacyHorizon != null &&
+          !Object.prototype.hasOwnProperty.call(raw || {}, "ownershipHorizonMonths")
+        ) {
+          patch.ownershipHorizonMonths = legacyHorizon;
+        }
+        return patch;
+      });
+    }
+  } else if (legacyCashTarget != null || legacyHorizon != null) {
+    out.scenarios = out.scenarios.map((sc) => ({
+      ...sc,
+      ...(legacyCashTarget != null ? { targetCashAllInMonthly: legacyCashTarget } : {}),
+      ...(legacyHorizon != null ? { ownershipHorizonMonths: legacyHorizon } : {}),
+    }));
   }
 
   if (typeof saved.activeScenarioId === "string") {

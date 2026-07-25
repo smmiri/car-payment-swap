@@ -1,10 +1,11 @@
 {
   "NEGATIVE_EQUITY": "Negative equity of {{amount}} is rolled into the new loan.",
-  "OVER_TARGET": "Economic monthly cost is {{over}} over your target.",
+  "OVER_TARGET": "Cash all-in monthly is {{over}} over this scenario's target.",
   "OVER_MAX_BUDGET": "Purchase price is {{over}} above the solved max budget ({{max}}).",
   "REBATE_INELIGIBLE": "Federal EVAP looks ineligible ({{reason}}). Price {{price}}.",
-  "OPERATING_EXCEEDS_TARGET": "Insurance + maintenance + fuel alone exceed your target all-in monthly — no loan room left.",
+  "OPERATING_EXCEEDS_TARGET": "Insurance + maintenance + fuel alone exceed this scenario's cash target — no loan room left.",
   "ECONOMIC_TARGET_INFEASIBLE": "No swap scenario reaches your target economic monthly cost with the current assumptions.",
+  "CASH_TARGET_INFEASIBLE": "No purchase price meets this scenario's cash all-in target with the current assumptions.",
   "UNDERWATER_AT_HORIZON": "Estimated exit equity is negative by {{amount}} — loan balance exceeds exit value at the horizon.",
   "LONG_TERM": "Term of {{months}} months is longer than the typical 84-month ceiling.",
   "BC_PST_TIER_NEAR": "Purchase price is near a BC PST rate tier boundary — small price changes can jump the rate.",
