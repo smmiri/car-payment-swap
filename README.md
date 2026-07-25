@@ -15,26 +15,6 @@ Open-source Canadian **vehicle payment swap** calculator. Compare keeping your f
 - Reverse **max affordable purchase price** (binary search)
 - Input persistence (`smc_inputs` localStorage + cookie when small enough)
 
-## Develop
-
-```bash
-npm install
-npm test
-npm run dev
-```
-
-Production build:
-
-```bash
-VITE_BASE=/ VITE_SITE_URL=https://swapmycar.smmiri.com npm run build
-npm run preview
-```
-
-## Deploy
-
-GitHub Pages workflow: `.github/workflows/deploy-pages.yml`  
-Custom domain setup: [`docs/CUSTOM_DOMAIN.md`](docs/CUSTOM_DOMAIN.md)
-
 ## License
 
 MIT © Mohammad Miri
