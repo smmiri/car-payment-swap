@@ -14,10 +14,12 @@ export default function ComparisonTable({ results }) {
             <th className="px-4 py-3 font-semibold">{t("table.scenario")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.tradeIn")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.price")}</th>
-            <th className="px-4 py-3 font-semibold">{t("table.allIn")}</th>
+            <th className="px-4 py-3 font-semibold">{t("table.economic")}</th>
+            <th className="px-4 py-3 font-semibold">{t("table.cashAllIn")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.vsCurrent")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.vsTarget")}</th>
-            <th className="px-4 py-3 font-semibold">{t("table.budgetGap")}</th>
+            <th className="px-4 py-3 font-semibold">{t("table.terminalValue")}</th>
+            <th className="px-4 py-3 font-semibold">{t("table.terminalEquity")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.cashToClose")}</th>
           </tr>
         </thead>
@@ -40,7 +42,10 @@ export default function ComparisonTable({ results }) {
                 <td className="px-4 py-3 tabular-nums">{fmt.formatCurrency(s.tradeInValue)}</td>
                 <td className="px-4 py-3 tabular-nums">{fmt.formatCurrency(s.purchasePrice)}</td>
                 <td className="px-4 py-3 tabular-nums font-semibold text-heading">
-                  {fmt.formatCurrency(s.allInMonthly)}
+                  {fmt.formatCurrency(s.economicMonthly)}
+                </td>
+                <td className="px-4 py-3 tabular-nums text-muted">
+                  {fmt.formatCurrency(s.cashAllInMonthly)}
                 </td>
                 <td
                   className={`px-4 py-3 tabular-nums ${
@@ -56,8 +61,15 @@ export default function ComparisonTable({ results }) {
                 >
                   {fmt.formatSignedCurrency(s.vsTarget)}
                 </td>
-                <td className="px-4 py-3 tabular-nums">
-                  {s.overMaxBudget > 0 ? fmt.formatCurrency(s.overMaxBudget) : "—"}
+                <td className="px-4 py-3 tabular-nums">{fmt.formatCurrency(s.terminalVehicleValue)}</td>
+                <td
+                  className={`px-4 py-3 tabular-nums ${
+                    s.terminalEquity >= 0
+                      ? "text-emerald-700 dark:text-emerald-400"
+                      : "text-rose-700 dark:text-rose-400"
+                  }`}
+                >
+                  {fmt.formatSignedCurrency(s.terminalEquity)}
                 </td>
                 <td className="px-4 py-3 tabular-nums">{fmt.formatCurrency(s.cashToClose)}</td>
               </tr>

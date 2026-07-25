@@ -20,6 +20,10 @@ export default function Methodology({ repoUrl = "https://github.com/smmiri/car-p
 
       <div className="mt-6 space-y-4 text-sm text-body">
         <div>
+          <h3 className="font-semibold text-heading">{t("methodology.economicTitle")}</h3>
+          <p className="mt-1 leading-relaxed">{t("methodology.economicBody")}</p>
+        </div>
+        <div>
           <h3 className="font-semibold text-heading">{t("methodology.taxTitle")}</h3>
           <p className="mt-1 leading-relaxed">{t("methodology.taxBody")}</p>
         </div>
@@ -58,6 +62,36 @@ export default function Methodology({ repoUrl = "https://github.com/smmiri/car-p
                 rel="noreferrer noopener"
               >
                 CRA GST/HST on motor vehicles (trade-in)
+              </a>
+            </li>
+            <li>
+              <a
+                className="link-accent"
+                href="https://developer.edmunds.com/api-documentation/vehicle/price_tco/v1/"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                Edmunds True Cost to Own (depreciation methodology)
+              </a>
+            </li>
+            <li>
+              <a
+                className="link-accent"
+                href="https://exchange.aaa.com/automotive/aaas-your-driving-costs"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                AAA Your Driving Costs
+              </a>
+            </li>
+            <li>
+              <a
+                className="link-accent"
+                href="https://caaneo.ca/automotive/driving-cost-calculator/"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                CAA Driving Costs Calculator (Canadian Black Book forecasts)
               </a>
             </li>
             <li>

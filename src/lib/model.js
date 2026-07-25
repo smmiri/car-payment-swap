@@ -1,12 +1,12 @@
 /**
  * SwapMyCar financial model.
  *
- * Primary metric: all-in monthly = normalized loan payment + insurance + M&O + fuel/elec.
+ * Primary metric: economic monthly = net horizon TCO / ownershipHorizonMonths.
+ * Secondary metric: cashAllInMonthly = normalized loan payment + insurance + M&O + fuel/elec.
  * Auto loans: monthly compounding (see loan.js) — not Canadian mortgage semi-annual.
  */
 
 import {
-  invertLoanPayment,
   loanPayment,
   normalizeToMonthly,
   totalInterest,
@@ -22,15 +22,65 @@ import {
   defaultOperatingCosts,
   sumOperatingMonthly,
 } from "./operating-costs.js";
+import {
+  computeHorizonEconomics,
+  terminalVehicleValue,
+  suggestedRetainedPercent,
+  isUsedVehicleType,
+} from "./horizon-cost.js";
 import { warn, info, error } from "./warning-codes.js";
 
 function fieldMode(field) {
   if (field && typeof field === "object" && "mode" in field) return field;
+  // Legacy plain number → treat as manual so saved overrides stick.
+  if (typeof field === "number" && Number.isFinite(field)) {
+    return { mode: "manual", manual: field };
+  }
   return { mode: "auto", manual: field ?? 0 };
+}
+
+export function resolveRetainedPercent({
+  retainedField,
+  vehicleAgeYears = 0,
+  horizonMonths = 60,
+  isUsed = false,
+}) {
+  const suggested = suggestedRetainedPercent({
+    vehicleAgeYears,
+    horizonMonths,
+    isUsed,
+  });
+  return resolveFieldValue({
+    mode: fieldMode(retainedField).mode,
+    manual: fieldMode(retainedField).manual,
+    computed: suggested,
+  });
+}
+
+export function targetEconomicMonthly(global) {
+  if (!global) return 0;
+  if (typeof global.targetEconomicMonthly === "number") {
+    return global.targetEconomicMonthly;
+  }
+  return global.targetAllInMonthly || 0;
+}
+
+export function ownershipHorizonMonths(global) {
+  return Math.max(1, global?.ownershipHorizonMonths || 60);
 }
 
 export function tradeEquity(tradeInValue, remainingBalance) {
   return (tradeInValue || 0) - (remainingBalance || 0);
+}
+
+function attachHorizonMetrics(base, horizon) {
+  return {
+    ...base,
+    ...horizon,
+    cashAllInMonthly: base.cashAllInMonthly,
+    economicMonthly: horizon.economicMonthly,
+    vsTarget: horizon.economicMonthly - base.target,
+  };
 }
 
 /**
@@ -38,6 +88,19 @@ export function tradeEquity(tradeInValue, remainingBalance) {
  */
 export function simulateCurrent(inputs) {
   const { global: g, current: c } = inputs;
+  const target = targetEconomicMonthly(g);
+  const horizonMonths = ownershipHorizonMonths(g);
+  const balance = Math.max(0, c.balance || 0);
+  const marketValue = Math.max(0, c.marketValue ?? 0);
+  const vehicleAgeYears = Math.max(0, c.vehicleAgeYears ?? 0);
+  const retainedResolved = resolveRetainedPercent({
+    retainedField: c.retainedValuePercent,
+    vehicleAgeYears,
+    horizonMonths,
+    isUsed: true,
+  });
+  const retainedPercent = retainedResolved.value;
+
   const insurance = resolveFieldValue({
     mode: fieldMode(c.insurance).mode,
     manual: fieldMode(c.insurance).manual,
@@ -60,17 +123,43 @@ export function simulateCurrent(inputs) {
     mo: mo.value,
     fuel: fuel.value,
   });
-  const allInMonthly = loanMonthly + operatingMonthly;
+  const cashAllInMonthly = loanMonthly + operatingMonthly;
 
-  return {
-    loanMonthly,
-    insurance: insurance.value,
-    mo: mo.value,
-    fuel: fuel.value,
+  const openingEquity = marketValue - balance;
+  const horizon = computeHorizonEconomics({
+    horizonMonths,
+    openingEquity,
+    upfrontCash: 0,
+    loanPrincipal: balance,
+    apr: c.apr || 0,
+    termMonths: c.remainingTermMonths || 60,
+    paymentFreq: c.freq || "monthly",
     operatingMonthly,
-    allInMonthly,
-    vsTarget: allInMonthly - (g.targetAllInMonthly || 0),
-  };
+    assetValue: marketValue,
+    retainedPercent,
+  });
+
+  return attachHorizonMetrics(
+    {
+      loanMonthly,
+      insurance: insurance.value,
+      mo: mo.value,
+      fuel: fuel.value,
+      operatingMonthly,
+      cashAllInMonthly,
+      marketValue,
+      vehicleAgeYears,
+      retainedPercent: horizon.retainedPercent,
+      retainedSuggested: suggestedRetainedPercent({
+        vehicleAgeYears,
+        horizonMonths,
+        isUsed: true,
+      }),
+      balance,
+      target,
+    },
+    horizon,
+  );
 }
 
 /**
@@ -81,6 +170,8 @@ export function simulateScenario(inputs, scenario) {
   const current = inputs.current;
   const sc = scenario;
   const warnings = [];
+  const target = targetEconomicMonthly(g);
+  const horizonMonths = ownershipHorizonMonths(g);
 
   const dealerFeesResolved = resolveFieldValue({
     mode: fieldMode(sc.dealerFees).mode,
@@ -91,6 +182,15 @@ export function simulateScenario(inputs, scenario) {
   const stickerPrice = Math.max(0, sc.purchasePrice || 0);
   const tradeIn = Math.max(0, sc.tradeInValue || 0);
   const equity = tradeEquity(tradeIn, current.balance || 0);
+  const used = isUsedVehicleType(sc.vehicleType);
+  const vehicleAgeYears = used ? Math.max(0, sc.vehicleAgeYears ?? 0) : 0;
+  const retainedResolved = resolveRetainedPercent({
+    retainedField: sc.retainedValuePercent,
+    vehicleAgeYears,
+    horizonMonths,
+    isUsed: used,
+  });
+  const retainedPercent = retainedResolved.value;
 
   if (equity < 0) {
     warnings.push(
@@ -183,7 +283,6 @@ export function simulateScenario(inputs, scenario) {
     forceIneligible: forceEvapOff || null,
   });
 
-  // Provincial force flags applied separately if needed
   if (forceProvOff) {
     incentives.provincial.eligible = false;
     incentives.provincial.amount = 0;
@@ -263,15 +362,10 @@ export function simulateScenario(inputs, scenario) {
     mo: mo.value,
     fuel: fuel.value,
   });
-  const allInMonthly = loanMonthly + operatingMonthly;
-  const target = g.targetAllInMonthly || 0;
-  const vsTarget = allInMonthly - target;
+  const cashAllInMonthly = loanMonthly + operatingMonthly;
 
   const cashToClose =
-    down +
-    Math.max(0, -equity) +
-    (financeTaxes ? 0 : taxes) +
-    (financeTaxes ? 0 : licensing);
+    down + (financeTaxes ? 0 : taxes) + (financeTaxes ? 0 : licensing);
 
   const interest = totalInterest(
     amountFinanced.value,
@@ -280,9 +374,37 @@ export function simulateScenario(inputs, scenario) {
     sc.paymentFreq || "monthly",
   );
 
+  const openingEquity = equity;
+  const upfrontCash = cashToClose;
+  const horizon = computeHorizonEconomics({
+    horizonMonths,
+    openingEquity,
+    upfrontCash,
+    loanPrincipal: amountFinanced.value,
+    apr: sc.apr || 0,
+    termMonths: sc.termMonths || 60,
+    paymentFreq: sc.paymentFreq || "monthly",
+    operatingMonthly,
+    assetValue: stickerPrice,
+    retainedPercent,
+  });
+
+  const vsTarget = horizon.economicMonthly - target;
+
   if (vsTarget > 1) {
     warnings.push(
-      warn("OVER_TARGET", "warn", { over: vsTarget, allIn: allInMonthly, target }),
+      warn("OVER_TARGET", "warn", {
+        over: vsTarget,
+        allIn: horizon.economicMonthly,
+        target,
+      }),
+    );
+  }
+  if (horizon.terminalEquity < 0) {
+    warnings.push(
+      warn("UNDERWATER_AT_HORIZON", "warn", {
+        amount: Math.abs(horizon.terminalEquity),
+      }),
     );
   }
   if ((sc.termMonths || 0) > 84) {
@@ -333,7 +455,26 @@ export function simulateScenario(inputs, scenario) {
     mo: mo.value,
     fuel: fuel.value,
     operatingMonthly,
-    allInMonthly,
+    cashAllInMonthly,
+    economicMonthly: horizon.economicMonthly,
+    vehicleAgeYears,
+    retainedPercent: horizon.retainedPercent,
+    retainedSuggested: suggestedRetainedPercent({
+      vehicleAgeYears,
+      horizonMonths,
+      isUsed: used,
+    }),
+    terminalVehicleValue: horizon.terminalVehicleValue,
+    remainingLoanBalance: horizon.remainingLoanBalance,
+    terminalEquity: horizon.terminalEquity,
+    netHorizonCost: horizon.netHorizonCost,
+    horizonBreakdown: {
+      openingEquity: horizon.openingEquity,
+      upfrontCash: horizon.upfrontCash,
+      loanPaymentsTotal: horizon.loanPaymentsTotal,
+      operatingTotal: horizon.operatingTotal,
+      terminalEquityCredit: horizon.terminalEquity,
+    },
     vsTarget,
     cashToClose: Math.max(0, cashToClose),
     totalInterest: interest,
@@ -343,6 +484,7 @@ export function simulateScenario(inputs, scenario) {
     derivedFromOverride: Object.fromEntries(
       Object.entries(modes).map(([k, v]) => [k, Boolean(v.derivedFromOverride)]),
     ),
+    target,
   };
 }
 
@@ -396,72 +538,30 @@ export function amountFinancedAtPrice(inputs, scenario, stickerPrice) {
 }
 
 /**
- * Reverse-solve max pre-tax purchase price for target all-in monthly.
+ * Economic monthly for a candidate purchase price (max-budget binary search).
+ */
+export function economicMonthlyAtPrice(inputs, scenario, stickerPrice) {
+  const sim = simulateScenario(inputs, { ...scenario, purchasePrice: stickerPrice });
+  return sim.economicMonthly;
+}
+
+/**
+ * Reverse-solve max pre-tax purchase price for target economic monthly.
  */
 export function solveMaxBudget(inputs, scenario) {
   const g = inputs.global;
   const sc = scenario;
-  const target = g.targetAllInMonthly || 0;
+  const target = targetEconomicMonthly(g);
 
-  const opsDefaults = defaultOperatingCosts({
-    province: g.province,
-    vehicleType: sc.vehicleType,
-    annualKm: g.annualKm,
-    currentInsurance: fieldMode(inputs.current.insurance).manual || 180,
-  });
-  const insurance = resolveFieldValue({
-    mode: fieldMode(sc.insurance).mode,
-    manual: fieldMode(sc.insurance).manual,
-    computed: opsDefaults.insurance,
-  }).value;
-  const mo = resolveFieldValue({
-    mode: fieldMode(sc.mo).mode,
-    manual: fieldMode(sc.mo).manual,
-    computed: opsDefaults.mo,
-  }).value;
-  const fuel = resolveFieldValue({
-    mode: fieldMode(sc.fuel).mode,
-    manual: fieldMode(sc.fuel).manual,
-    computed: opsDefaults.fuel,
-  }).value;
-  const operatingMonthly = sumOperatingMonthly({ insurance, mo, fuel });
-  const maxLoanMonthly = target - operatingMonthly;
-
-  if (maxLoanMonthly <= 0) {
-    return {
-      feasible: false,
-      maxPurchasePrice: 0,
-      maxLoanPaymentMonthly: maxLoanMonthly,
-      maxAmountFinanced: 0,
-      operatingMonthly,
-      bindingConstraint: "OPERATING_EXCEEDS_TARGET",
-      impliedAllInMonthly: operatingMonthly,
-      error: "OPERATING_EXCEEDS_TARGET",
-    };
-  }
-
-  // Invert using payment at the scenario frequency (auto loan monthly compounding).
-  const paymentAtFreq =
-    (maxLoanMonthly * 12) /
-    (sc.paymentFreq === "weekly" ? 52 : sc.paymentFreq === "biweekly" ? 26 : 12);
-
-  const maxAmountFinanced = invertLoanPayment(
-    paymentAtFreq,
-    sc.apr || 0,
-    sc.termMonths || 60,
-    sc.paymentFreq || "monthly",
-  );
-
-  // Binary search sticker price P
   let lo = 0;
   let hi = 250_000;
   let best = 0;
-  let bindingConstraint = "loan_payment_room";
+  let bindingConstraint = "economic_target";
 
   for (let i = 0; i < 48; i++) {
     const mid = (lo + hi) / 2;
-    const financed = amountFinancedAtPrice(inputs, sc, mid);
-    if (financed <= maxAmountFinanced) {
+    const economic = economicMonthlyAtPrice(inputs, sc, mid);
+    if (economic <= target + 0.01) {
       best = mid;
       lo = mid;
     } else {
@@ -469,7 +569,21 @@ export function solveMaxBudget(inputs, scenario) {
     }
   }
 
-  // Check EVAP cap proximity / PST tier jumps
+  const simAtBest = simulateScenario(inputs, { ...sc, purchasePrice: Math.round(best) });
+
+  if (best <= 0) {
+    const minEconomic = economicMonthlyAtPrice(inputs, sc, 0);
+    return {
+      feasible: false,
+      maxPurchasePrice: 0,
+      operatingMonthly: simAtBest.operatingMonthly,
+      bindingConstraint: "ECONOMIC_TARGET_INFEASIBLE",
+      impliedEconomicMonthly: minEconomic,
+      impliedCashAllInMonthly: simAtBest.cashAllInMonthly,
+      error: "ECONOMIC_TARGET_INFEASIBLE",
+    };
+  }
+
   const incentivesAtBest = computeEvIncentives({
     province: g.province,
     vehicleType: sc.vehicleType,
@@ -493,27 +607,20 @@ export function solveMaxBudget(inputs, scenario) {
     }
   }
 
-  const sim = simulateScenario(inputs, { ...sc, purchasePrice: Math.round(best) });
-
   return {
     feasible: true,
     maxPurchasePrice: Math.round(best),
-    maxLoanPaymentMonthly: maxLoanMonthly,
-    maxAmountFinanced,
-    operatingMonthly,
+    operatingMonthly: simAtBest.operatingMonthly,
     bindingConstraint,
-    impliedAllInMonthly: sim.allInMonthly,
-    paymentAtFreq,
+    impliedEconomicMonthly: simAtBest.economicMonthly,
+    impliedCashAllInMonthly: simAtBest.cashAllInMonthly,
+    terminalEquity: simAtBest.terminalEquity,
   };
 }
 
 /**
  * Resolve a scenario's effective purchase price. When `priceMode === "solved"`
- * the price tracks the scenario's own max-affordable budget, so changing the
- * trade-in (or any other assumption) auto-updates the purchase price.
- *
- * Note: this does not recurse — `solveMaxBudget` solves for the price directly
- * and only calls `simulateScenario` (which ignores `priceMode`).
+ * the price tracks the scenario's own max-affordable budget.
  */
 export function resolveEffectiveScenario(inputs, scenario) {
   if (!scenario || scenario.priceMode !== "solved") return scenario;
@@ -539,6 +646,8 @@ export function compareScenarios(inputs) {
     ? solveMaxBudget(inputs, activeScenario)
     : null;
 
+  const target = targetEconomicMonthly(inputs.global);
+
   for (const s of scenarios) {
     if (
       maxBudget?.feasible &&
@@ -555,24 +664,22 @@ export function compareScenarios(inputs) {
     } else {
       s.overMaxBudget = 0;
     }
-    s.vsCurrent = current.allInMonthly - s.allInMonthly;
-    s.meetsTarget = s.allInMonthly <= (inputs.global.targetAllInMonthly || 0) + 0.5;
+    s.vsCurrent = current.economicMonthly - s.economicMonthly;
+    s.meetsTarget = s.economicMonthly <= target + 0.5;
   }
 
-  // Best: prefer under target with lowest all-in; else lowest all-in
   const under = scenarios.filter((s) => s.meetsTarget);
   const best = (under.length ? under : scenarios).slice().sort(
-    (a, b) => a.allInMonthly - b.allInMonthly,
+    (a, b) => a.economicMonthly - b.economicMonthly,
   )[0] || null;
 
   const warnings = [
-    ...(maxBudget && !maxBudget.feasible
-      ? [error("OPERATING_EXCEEDS_TARGET")]
+    ...(maxBudget && !maxBudget.feasible && maxBudget.error === "ECONOMIC_TARGET_INFEASIBLE"
+      ? [error("ECONOMIC_TARGET_INFEASIBLE")]
       : []),
     ...scenarios.flatMap((s) => s.warnings || []),
   ];
 
-  // Deduplicate warning codes loosely
   const seen = new Set();
   const uniqueWarnings = warnings.filter((w) => {
     const key = `${w.code}:${JSON.stringify(w.params || {})}`;
@@ -586,7 +693,15 @@ export function compareScenarios(inputs) {
     scenarios,
     best,
     maxBudget,
-    targetAllInMonthly: inputs.global.targetAllInMonthly,
+    targetEconomicMonthly: target,
+    ownershipHorizonMonths: ownershipHorizonMonths(inputs.global),
     warnings: uniqueWarnings,
   };
 }
+
+/** @deprecated use cashAllInMonthly or economicMonthly */
+export function legacyAllInMonthly(sim) {
+  return sim.cashAllInMonthly ?? sim.allInMonthly;
+}
+
+export { terminalVehicleValue, suggestedRetainedPercent, isUsedVehicleType };

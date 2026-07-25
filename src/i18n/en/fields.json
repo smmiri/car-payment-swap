@@ -3,9 +3,29 @@
     "label": "Province",
     "help": "Drives vehicle taxes, licensing presets, energy prices, and EV rebates."
   },
+  "targetEconomicMonthly": {
+    "label": "Target economic cost / month",
+    "help": "Goal for net horizon ownership cost divided by your ownership horizon."
+  },
+  "ownershipHorizonMonths": {
+    "label": "Ownership horizon",
+    "help": "How long you plan to keep the vehicle before selling or trading."
+  },
+  "marketValue": {
+    "label": "Current market value",
+    "help": "Estimated value of your current car today."
+  },
+  "vehicleAgeYears": {
+    "label": "Vehicle age",
+    "help": "Age today in years. Used cars already took the steep early drop — older cars retain more of today's price over the same ownership horizon."
+  },
+  "retainedValuePercent": {
+    "label": "Retained value at horizon",
+    "help": "Percent of purchase/market value retained at the ownership horizon. Auto follows an age-aware curve; override if you prefer."
+  },
   "targetAllInMonthly": {
     "label": "Target all-in monthly",
-    "help": "Goal for loan + insurance + maintenance + fuel/electricity."
+    "help": "Legacy field — migrated to target economic cost."
   },
   "annualKm": {
     "label": "Annual kilometres",

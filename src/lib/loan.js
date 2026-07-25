@@ -84,3 +84,75 @@ export function totalInterest(principal, aprPct, termMonths, freq = "monthly") {
   const payment = loanPayment(principal, aprPct, termMonths, freq);
   return Math.max(0, payment * n - principal);
 }
+
+/**
+ * Payment periods elapsed over an ownership horizon.
+ */
+export function periodsAtHorizon(horizonMonths, freq = "monthly") {
+  const ppy = periodsPerYear(freq);
+  return Math.max(0, Math.round((horizonMonths / 12) * ppy));
+}
+
+/**
+ * Remaining principal after `periodsPaid` amortizing payments.
+ */
+export function remainingBalanceAfterPeriods(
+  principal,
+  payment,
+  rate,
+  periodsPaid,
+  totalPeriods,
+) {
+  if (!(principal > 0)) return 0;
+  const paid = Math.max(0, Math.min(periodsPaid, totalPeriods));
+  if (paid <= 0) return principal;
+  if (paid >= totalPeriods) return 0;
+  if (!(rate > 0)) return Math.max(0, principal - payment * paid);
+  const factor = Math.pow(1 + rate, paid);
+  return Math.max(0, principal * factor - (payment * (factor - 1)) / rate);
+}
+
+/**
+ * Total loan payments made through the horizon (stops when the loan is paid off).
+ */
+export function paymentsThroughHorizon(
+  principal,
+  aprPct,
+  termMonths,
+  freq,
+  horizonMonths,
+) {
+  if (!(principal > 0) || !(horizonMonths > 0)) return 0;
+  const ppy = periodsPerYear(freq);
+  const totalPeriods = Math.round((termMonths / 12) * ppy);
+  const horizonPeriods = periodsAtHorizon(horizonMonths, freq);
+  const periodsPaid = Math.min(horizonPeriods, totalPeriods);
+  const payment = loanPayment(principal, aprPct, termMonths, freq);
+  return payment * periodsPaid;
+}
+
+/**
+ * Remaining loan balance at the ownership horizon.
+ */
+export function remainingBalanceAtHorizon(
+  principal,
+  aprPct,
+  termMonths,
+  freq,
+  horizonMonths,
+) {
+  if (!(principal > 0)) return 0;
+  const ppy = periodsPerYear(freq);
+  const totalPeriods = Math.round((termMonths / 12) * ppy);
+  const horizonPeriods = periodsAtHorizon(horizonMonths, freq);
+  const periodsPaid = Math.min(horizonPeriods, totalPeriods);
+  const rate = periodRate(aprPct, freq);
+  const payment = loanPayment(principal, aprPct, termMonths, freq);
+  return remainingBalanceAfterPeriods(
+    principal,
+    payment,
+    rate,
+    periodsPaid,
+    totalPeriods,
+  );
+}

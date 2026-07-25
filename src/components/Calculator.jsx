@@ -7,7 +7,12 @@ import {
   loadInputsFromCookie,
   writeInputsToCookie,
 } from "../lib/persist-inputs.js";
-import { compareScenarios } from "../lib/model.js";
+import {
+  compareScenarios,
+  terminalVehicleValue,
+  suggestedRetainedPercent,
+  isUsedVehicleType,
+} from "../lib/model.js";
 import { defaultOperatingCosts } from "../lib/operating-costs.js";
 import { defaultLicensing } from "../lib/vehicle-taxes.js";
 import InputField from "./InputField.jsx";
@@ -164,10 +169,16 @@ export default function Calculator() {
               options={PROVINCE_CODES.map((c) => ({ value: c, label: tProvinces(c) }))}
             />
             <InputField
-              name="targetAllInMonthly"
-              value={inputs.global.targetAllInMonthly}
-              meta={FIELD_META.targetAllInMonthly}
-              onChange={(_, v) => updateGlobal({ targetAllInMonthly: v })}
+              name="targetEconomicMonthly"
+              value={inputs.global.targetEconomicMonthly}
+              meta={FIELD_META.targetEconomicMonthly}
+              onChange={(_, v) => updateGlobal({ targetEconomicMonthly: v })}
+            />
+            <InputField
+              name="ownershipHorizonMonths"
+              value={inputs.global.ownershipHorizonMonths}
+              meta={FIELD_META.ownershipHorizonMonths}
+              onChange={(_, v) => updateGlobal({ ownershipHorizonMonths: v })}
             />
             <SelectField
               label={t("fields.targetFreq")}
@@ -194,6 +205,41 @@ export default function Calculator() {
               onChange={(_, v) => updateCurrent({ balance: v })}
             />
             <InputField
+              name="marketValue"
+              value={inputs.current.marketValue}
+              meta={FIELD_META.marketValue}
+              onChange={(_, v) => updateCurrent({ marketValue: v })}
+            />
+            <InputField
+              name="vehicleAgeYears"
+              value={inputs.current.vehicleAgeYears}
+              meta={FIELD_META.vehicleAgeYears}
+              hint={
+                inputs.current.retainedValuePercent?.mode === "manual"
+                  ? t("calculator.ageIgnoredManual")
+                  : t("calculator.ageDrivesRetained")
+              }
+              onChange={(_, v) => updateCurrent({ vehicleAgeYears: v })}
+            />
+            <OverrideField
+              label={t("fields.retainedValuePercent")}
+              help={FIELD_META.retainedValuePercent?.help}
+              mode={inputs.current.retainedValuePercent?.mode || "auto"}
+              manual={inputs.current.retainedValuePercent?.manual ?? 50}
+              computed={suggestedRetainedPercent({
+                vehicleAgeYears: inputs.current.vehicleAgeYears,
+                horizonMonths: inputs.global.ownershipHorizonMonths,
+                isUsed: true,
+              })}
+              suffix="%"
+              step={5}
+              min={0}
+              onModeChange={(mode) => setModeField("current", "retainedValuePercent", mode)}
+              onManualChange={(manual) =>
+                setModeField("current", "retainedValuePercent", "manual", manual)
+              }
+            />
+            <InputField
               name="payment"
               value={inputs.current.payment}
               meta={FIELD_META.payment}
@@ -206,9 +252,21 @@ export default function Calculator() {
               options={FREQ_OPTIONS.map((f) => ({ value: f, label: t(`freq.${f}`) }))}
             />
             <div className="rounded-md border border-default bg-surface-muted px-3 py-2.5 text-sm">
-              <div className="text-xs uppercase tracking-wide text-muted">Current all-in</div>
+              <div className="text-xs uppercase tracking-wide text-muted">{t("summary.currentEconomic")}</div>
               <div className="text-lg font-semibold tabular-nums text-heading">
-                {fmt.formatCurrency(results.current.allInMonthly)}
+                {fmt.formatCurrency(results.current.economicMonthly)}
+              </div>
+              <div className="mt-1 text-xs text-muted">
+                {t("summary.cashAllIn")}: {fmt.formatCurrency(results.current.cashAllInMonthly)}/mo
+              </div>
+              <div className="mt-1 text-xs text-muted">
+                {t("calculator.exitValue")}:{" "}
+                {fmt.formatCurrency(
+                  terminalVehicleValue(
+                    inputs.current.marketValue,
+                    results.current.retainedPercent,
+                  ),
+                )}
               </div>
             </div>
           </div>
@@ -318,9 +376,29 @@ export default function Calculator() {
                 <SelectField
                   label={t("fields.vehicleType")}
                   value={activeScenario.vehicleType}
-                  onChange={(v) => updateScenario(activeScenario.id, { vehicleType: v })}
+                  onChange={(v) =>
+                    updateScenario(activeScenario.id, {
+                      vehicleType: v,
+                      ...(isUsedVehicleType(v) && !(activeScenario.vehicleAgeYears > 0)
+                        ? { vehicleAgeYears: 4 }
+                        : {}),
+                    })
+                  }
                   options={VEHICLE_TYPES.map((v) => ({ value: v, label: t(`vehicleTypes.${v}`) }))}
                 />
+                {isUsedVehicleType(activeScenario.vehicleType) ? (
+                  <InputField
+                    name="vehicleAgeYears"
+                    value={activeScenario.vehicleAgeYears ?? 0}
+                    meta={FIELD_META.vehicleAgeYears}
+                    hint={
+                      activeScenario.retainedValuePercent?.mode === "manual"
+                        ? t("calculator.ageIgnoredManual")
+                        : t("calculator.ageDrivesRetained")
+                    }
+                    onChange={(_, v) => updateScenario(activeScenario.id, { vehicleAgeYears: v })}
+                  />
+                ) : null}
                 <InputField
                   name="purchasePrice"
                   value={displayedPurchasePrice}
@@ -358,6 +436,53 @@ export default function Calculator() {
                   meta={FIELD_META.termMonths}
                   onChange={(_, v) => updateScenario(activeScenario.id, { termMonths: v })}
                 />
+                <OverrideField
+                  label={t("fields.retainedValuePercent")}
+                  help={FIELD_META.retainedValuePercent?.help}
+                  mode={activeScenario.retainedValuePercent?.mode || "auto"}
+                  manual={activeScenario.retainedValuePercent?.manual ?? 50}
+                  computed={suggestedRetainedPercent({
+                    vehicleAgeYears: isUsedVehicleType(activeScenario.vehicleType)
+                      ? activeScenario.vehicleAgeYears
+                      : 0,
+                    horizonMonths: inputs.global.ownershipHorizonMonths,
+                    isUsed: isUsedVehicleType(activeScenario.vehicleType),
+                  })}
+                  suffix="%"
+                  step={5}
+                  min={0}
+                  onModeChange={(mode) => setModeField("scenario", "retainedValuePercent", mode)}
+                  onManualChange={(manual) =>
+                    setModeField("scenario", "retainedValuePercent", "manual", manual)
+                  }
+                />
+                <div className="rounded-md border border-default bg-surface-muted px-3 py-2.5 text-sm">
+                  <div className="text-xs uppercase tracking-wide text-muted">
+                    {t("calculator.exitValue")}
+                  </div>
+                  <div className="text-lg font-semibold tabular-nums text-heading">
+                    {fmt.formatCurrency(
+                      terminalVehicleValue(
+                        displayedPurchasePrice ?? activeScenario.purchasePrice,
+                        activeResult?.retainedPercent ??
+                          suggestedRetainedPercent({
+                            vehicleAgeYears: isUsedVehicleType(activeScenario.vehicleType)
+                              ? activeScenario.vehicleAgeYears
+                              : 0,
+                            horizonMonths: inputs.global.ownershipHorizonMonths,
+                            isUsed: isUsedVehicleType(activeScenario.vehicleType),
+                          }),
+                      ),
+                    )}
+                  </div>
+                  <div className="mt-1 text-xs text-muted">
+                    {(activeResult?.retainedPercent ?? 50).toFixed(1)}%{" "}
+                    {t("calculator.ofPurchasePrice")}
+                    {isUsedVehicleType(activeScenario.vehicleType)
+                      ? ` · ${t("calculator.ageAware", { age: activeScenario.vehicleAgeYears ?? 0 })}`
+                      : ""}
+                  </div>
+                </div>
                 <SelectField
                   label={t("fields.freq")}
                   value={activeScenario.paymentFreq}
@@ -431,14 +556,21 @@ export default function Calculator() {
               </div>
 
               {activeResult ? (
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
-                  <MiniStat label="All-in / mo" value={fmt.formatCurrency(activeResult.allInMonthly)} />
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5 text-sm">
+                  <MiniStat
+                    label={t("summary.economicMonthly")}
+                    value={fmt.formatCurrency(activeResult.economicMonthly)}
+                  />
+                  <MiniStat
+                    label={t("summary.cashAllIn")}
+                    value={fmt.formatCurrency(activeResult.cashAllInMonthly)}
+                  />
+                  <MiniStat
+                    label={t("table.terminalEquity")}
+                    value={fmt.formatSignedCurrency(activeResult.terminalEquity)}
+                  />
                   <MiniStat label="Amount financed" value={fmt.formatCurrency(activeResult.amountFinanced)} />
                   <MiniStat label="Taxes" value={fmt.formatCurrency(activeResult.taxes)} />
-                  <MiniStat
-                    label="Rebates"
-                    value={fmt.formatCurrency(activeResult.rebates?.total || 0)}
-                  />
                 </div>
               ) : null}
             </>

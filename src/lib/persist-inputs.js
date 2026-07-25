@@ -48,8 +48,22 @@ function sanitizeScenario(raw, fallback) {
   if (VEHICLE_SET.has(raw.vehicleType)) out.vehicleType = raw.vehicleType;
   if (FREQ_SET.has(raw.paymentFreq)) out.paymentFreq = raw.paymentFreq;
 
-  for (const key of ["purchasePrice", "tradeInValue", "downPayment", "apr", "termMonths"]) {
+  for (const key of ["purchasePrice", "tradeInValue", "downPayment", "apr", "termMonths", "vehicleAgeYears"]) {
     if (typeof raw[key] === "number" && Number.isFinite(raw[key])) out[key] = raw[key];
+  }
+  // Legacy plain number was a flat default, not a deliberate override — keep Auto
+  // so vehicle age can drive the retained-value curve.
+  if (typeof raw.retainedValuePercent === "number" && Number.isFinite(raw.retainedValuePercent)) {
+    out.retainedValuePercent = {
+      mode: "auto",
+      manual: Math.min(100, Math.max(0, raw.retainedValuePercent)),
+    };
+  } else {
+    const retained = sanitizeModeField(raw.retainedValuePercent, base.retainedValuePercent);
+    if (typeof retained.manual === "number") {
+      retained.manual = Math.min(100, Math.max(0, retained.manual));
+    }
+    out.retainedValuePercent = retained;
   }
   if (typeof raw.financeTaxes === "boolean") out.financeTaxes = raw.financeTaxes;
   if (typeof raw.alreadyClaimedEvap === "boolean") out.alreadyClaimedEvap = raw.alreadyClaimedEvap;
@@ -89,8 +103,25 @@ export function mergeSavedInputs(saved, defaults = DEFAULT_INPUTS) {
 
   if (saved.global && typeof saved.global === "object") {
     if (PROVINCE_SET.has(saved.global.province)) out.global.province = saved.global.province;
-    if (typeof saved.global.targetAllInMonthly === "number" && Number.isFinite(saved.global.targetAllInMonthly)) {
-      out.global.targetAllInMonthly = saved.global.targetAllInMonthly;
+    if (
+      typeof saved.global.targetEconomicMonthly === "number" &&
+      Number.isFinite(saved.global.targetEconomicMonthly)
+    ) {
+      out.global.targetEconomicMonthly = saved.global.targetEconomicMonthly;
+    } else if (
+      typeof saved.global.targetAllInMonthly === "number" &&
+      Number.isFinite(saved.global.targetAllInMonthly)
+    ) {
+      out.global.targetEconomicMonthly = saved.global.targetAllInMonthly;
+    }
+    if (
+      typeof saved.global.ownershipHorizonMonths === "number" &&
+      Number.isFinite(saved.global.ownershipHorizonMonths)
+    ) {
+      out.global.ownershipHorizonMonths = Math.min(
+        120,
+        Math.max(12, Math.round(saved.global.ownershipHorizonMonths)),
+      );
     }
     if (FREQ_SET.has(saved.global.targetFreq)) out.global.targetFreq = saved.global.targetFreq;
     if (typeof saved.global.annualKm === "number" && Number.isFinite(saved.global.annualKm)) {
@@ -99,10 +130,21 @@ export function mergeSavedInputs(saved, defaults = DEFAULT_INPUTS) {
   }
 
   if (saved.current && typeof saved.current === "object") {
-    for (const key of ["balance", "payment", "remainingTermMonths", "apr"]) {
+    for (const key of ["balance", "payment", "remainingTermMonths", "apr", "marketValue", "vehicleAgeYears"]) {
       if (typeof saved.current[key] === "number" && Number.isFinite(saved.current[key])) {
         out.current[key] = saved.current[key];
       }
+    }
+    if (typeof saved.current.retainedValuePercent === "number" && Number.isFinite(saved.current.retainedValuePercent)) {
+      out.current.retainedValuePercent = {
+        mode: "auto",
+        manual: Math.min(100, Math.max(0, saved.current.retainedValuePercent)),
+      };
+    } else if (saved.current.retainedValuePercent && typeof saved.current.retainedValuePercent === "object") {
+      out.current.retainedValuePercent = sanitizeModeField(
+        saved.current.retainedValuePercent,
+        out.current.retainedValuePercent,
+      );
     }
     if (FREQ_SET.has(saved.current.freq)) out.current.freq = saved.current.freq;
     out.current.insurance = sanitizeModeField(saved.current.insurance, out.current.insurance);

@@ -40,12 +40,121 @@ describe("trade equity", () => {
     assert.ok(sim.warnings.some((w) => w.code === "NEGATIVE_EQUITY"));
     assert.ok(sim.amountFinanced > 30_000);
   });
+
+  it("negative equity is not counted in cashToClose", () => {
+    const inputs = baseInputs({
+      current: { balance: 20_000 },
+      scenarios: [
+        createScenario({
+          id: "neg",
+          purchasePrice: 30_000,
+          tradeInValue: 15_000,
+          downPayment: 1_000,
+        }),
+      ],
+    });
+    const sim = simulateScenario(inputs, inputs.scenarios[0]);
+    assert.equal(sim.cashToClose, 1_000);
+  });
+});
+
+describe("economic monthly / terminal equity", () => {
+  it("higher retained value lowers economic monthly for scenarios", () => {
+    const inputs = baseInputs();
+    const low = simulateScenario(
+      inputs,
+      createScenario({
+        id: "low",
+        retainedValuePercent: { mode: "manual", manual: 30 },
+        purchasePrice: 28_000,
+      }),
+    );
+    const high = simulateScenario(
+      inputs,
+      createScenario({
+        id: "high",
+        retainedValuePercent: { mode: "manual", manual: 70 },
+        purchasePrice: 28_000,
+      }),
+    );
+    assert.ok(high.economicMonthly < low.economicMonthly);
+  });
+
+  it("older used car has higher auto retained % than new", () => {
+    const inputs = baseInputs({ global: { ownershipHorizonMonths: 60 } });
+    const used = simulateScenario(
+      inputs,
+      createScenario({
+        id: "used",
+        vehicleType: "used_gas",
+        vehicleAgeYears: 6,
+        purchasePrice: 28_000,
+        retainedValuePercent: { mode: "auto", manual: 50 },
+      }),
+    );
+    const neu = simulateScenario(
+      inputs,
+      createScenario({
+        id: "new",
+        vehicleType: "new_gas",
+        vehicleAgeYears: 0,
+        purchasePrice: 28_000,
+        retainedValuePercent: { mode: "auto", manual: 50 },
+      }),
+    );
+    assert.ok(used.retainedPercent > neu.retainedPercent);
+  });
+
+  it("cashAllInMonthly remains payment plus operating", () => {
+    const inputs = baseInputs({
+      current: {
+        payment: 500,
+        freq: "monthly",
+        insurance: { mode: "manual", manual: 100 },
+        mo: { mode: "manual", manual: 50 },
+        fuel: { mode: "manual", manual: 150 },
+      },
+    });
+    const cur = simulateCurrent(inputs);
+    assert.equal(cur.cashAllInMonthly, 800);
+    assert.ok(typeof cur.economicMonthly === "number");
+  });
+
+  it("opening equity differs for keep vs swap paths", () => {
+    const inputs = baseInputs({
+      current: { balance: 18_000, marketValue: 20_000 },
+    });
+    const keep = simulateCurrent(inputs);
+    const swap = simulateScenario(
+      inputs,
+      createScenario({ tradeInValue: 16_000, purchasePrice: 28_000 }),
+    );
+    assert.equal(keep.horizonBreakdown?.openingEquity ?? keep.openingEquity, 2_000);
+    assert.equal(swap.horizonBreakdown.openingEquity, -2_000);
+  });
+
+  it("partial horizon remaining debt reduces terminal equity", () => {
+    const inputs = baseInputs({
+      global: { ownershipHorizonMonths: 24 },
+      scenarios: [
+        createScenario({
+          id: "short",
+          purchasePrice: 28_000,
+          termMonths: 60,
+          retainedValuePercent: { mode: "manual", manual: 50 },
+        }),
+      ],
+    });
+    const sim = simulateScenario(inputs, inputs.scenarios[0]);
+    assert.ok(sim.remainingLoanBalance > 0);
+    assert.ok(sim.terminalEquity < sim.terminalVehicleValue);
+  });
 });
 
 describe("solveMaxBudget", () => {
-  it("target $900 all-in with $350 ops → $550 loan room", () => {
+  it("finds a purchase price at or under the economic target", () => {
     const inputs = baseInputs({
-      global: { targetAllInMonthly: 900, province: "ON" },
+      global: { targetEconomicMonthly: 900, province: "ON", ownershipHorizonMonths: 60 },
     });
     const sc = createScenario({
       id: "budget",
@@ -57,17 +166,36 @@ describe("solveMaxBudget", () => {
       insurance: { mode: "manual", manual: 150 },
       mo: { mode: "manual", manual: 100 },
       fuel: { mode: "manual", manual: 100 },
+      retainedValuePercent: { mode: "manual", manual: 50 },
     });
     const result = solveMaxBudget(inputs, sc);
     assert.equal(result.feasible, true);
-    assert.ok(Math.abs(result.operatingMonthly - 350) < 0.01);
-    assert.ok(Math.abs(result.maxLoanPaymentMonthly - 550) < 0.01);
     assert.ok(result.maxPurchasePrice > 0);
+    assert.ok(result.impliedEconomicMonthly <= inputs.global.targetEconomicMonthly + 1);
+  });
+
+  it("higher retained value raises the auto-solved purchase price", () => {
+    const mk = (retained) =>
+      createScenario({
+        id: `s_${retained}`,
+        priceMode: "solved",
+        tradeInValue: 16_000,
+        insurance: { mode: "manual", manual: 150 },
+        mo: { mode: "manual", manual: 100 },
+        fuel: { mode: "manual", manual: 100 },
+        retainedValuePercent: { mode: "manual", manual: retained },
+      });
+    const inputs = baseInputs({
+      global: { targetEconomicMonthly: 850, province: "ON" },
+    });
+    const low = resolveEffectiveScenario(inputs, mk(30)).purchasePrice;
+    const high = resolveEffectiveScenario(inputs, mk(70)).purchasePrice;
+    assert.ok(high > low);
   });
 });
 
 describe("compareScenarios", () => {
-  it("three trade-in levels show monotonic improvement", () => {
+  it("three trade-in levels show monotonic improvement in economic cost", () => {
     const inputs = baseInputs({
       scenarios: [
         createScenario({ id: "a", name: "Low", tradeInValue: 14_000, purchasePrice: 28_000 }),
@@ -76,10 +204,10 @@ describe("compareScenarios", () => {
       ],
     });
     const cmp = compareScenarios(inputs);
-    assert.ok(cmp.scenarios[0].allInMonthly >= cmp.scenarios[1].allInMonthly - 0.01);
-    assert.ok(cmp.scenarios[1].allInMonthly >= cmp.scenarios[2].allInMonthly - 0.01);
+    assert.ok(cmp.scenarios[0].economicMonthly >= cmp.scenarios[1].economicMonthly - 0.01);
+    assert.ok(cmp.scenarios[1].economicMonthly >= cmp.scenarios[2].economicMonthly - 0.01);
     assert.ok(cmp.best);
-    assert.ok(cmp.current.allInMonthly > 0);
+    assert.ok(cmp.current.economicMonthly !== 0);
   });
 });
 
@@ -129,7 +257,7 @@ describe("createScenario id handling", () => {
 
 describe("auto max budget (priceMode solved)", () => {
   it("effective purchase price tracks the solved max budget", () => {
-    const inputs = baseInputs({ global: { targetAllInMonthly: 900, province: "ON" } });
+    const inputs = baseInputs({ global: { targetEconomicMonthly: 850, province: "ON" } });
     const sc = createScenario({
       id: "solved",
       priceMode: "solved",
@@ -144,39 +272,6 @@ describe("auto max budget (priceMode solved)", () => {
     assert.equal(effective.purchasePrice, mb.maxPurchasePrice);
 
     const sim = simulateScenario(inputs, effective);
-    // Implied all-in should be at (not over) the target.
-    assert.ok(sim.allInMonthly <= inputs.global.targetAllInMonthly + 1);
-  });
-
-  it("higher trade-in raises the auto-solved purchase price", () => {
-    const mk = (tradeIn) =>
-      createScenario({
-        id: `s_${tradeIn}`,
-        priceMode: "solved",
-        tradeInValue: tradeIn,
-        insurance: { mode: "manual", manual: 150 },
-        mo: { mode: "manual", manual: 100 },
-        fuel: { mode: "manual", manual: 100 },
-      });
-    const inputs = baseInputs({ global: { targetAllInMonthly: 900, province: "ON" } });
-    const low = resolveEffectiveScenario(inputs, mk(10_000)).purchasePrice;
-    const high = resolveEffectiveScenario(inputs, mk(20_000)).purchasePrice;
-    assert.ok(high > low);
-  });
-});
-
-describe("simulateCurrent", () => {
-  it("sums normalized payment + ops", () => {
-    const inputs = baseInputs({
-      current: {
-        payment: 500,
-        freq: "monthly",
-        insurance: { mode: "manual", manual: 100 },
-        mo: { mode: "manual", manual: 50 },
-        fuel: { mode: "manual", manual: 150 },
-      },
-    });
-    const cur = simulateCurrent(inputs);
-    assert.equal(cur.allInMonthly, 800);
+    assert.ok(sim.economicMonthly <= inputs.global.targetEconomicMonthly + 1);
   });
 });
