@@ -3,6 +3,7 @@ import {
   normalizeToMonthly,
   paymentsThroughHorizon,
   remainingBalanceAtHorizon,
+  principalAndInterestThroughHorizon,
 } from "./loan.js";
 
 /**
@@ -94,6 +95,13 @@ export function computeHorizonEconomics({
     freq,
     horizon,
   );
+  const { principalPaid, interestPaid } = principalAndInterestThroughHorizon(
+    principal,
+    apr || 0,
+    term,
+    freq,
+    horizon,
+  );
   const operatingTotal = Math.max(0, operatingMonthly || 0) * horizon;
   const terminalValue = terminalVehicleValue(assetValue, retainedPercent);
   const remainingBalance = remainingBalanceAtHorizon(
@@ -115,11 +123,20 @@ export function computeHorizonEconomics({
   const scheduledPayment = loanPayment(principal, apr || 0, term, freq);
   const loanMonthly = normalizeToMonthly(scheduledPayment, freq);
 
+  // Split scheduled cash loan payment into principal vs interest using the
+  // amortization mix over the horizon (sums to loanMonthly for the cash chart).
+  const paidMix = principalPaid + interestPaid;
+  const principalMonthly =
+    paidMix > 0 ? (principalPaid / paidMix) * loanMonthly : loanMonthly > 0 ? loanMonthly : 0;
+  const interestMonthly = paidMix > 0 ? (interestPaid / paidMix) * loanMonthly : 0;
+
   return {
     horizonMonths: horizon,
     openingEquity: openingEquity || 0,
     upfrontCash: upfrontCash || 0,
     loanPaymentsTotal,
+    principalPaid,
+    interestPaid,
     operatingTotal,
     terminalVehicleValue: terminalValue,
     remainingLoanBalance: remainingBalance,
@@ -127,6 +144,8 @@ export function computeHorizonEconomics({
     netHorizonCost,
     economicMonthly,
     loanMonthly,
+    principalMonthly,
+    interestMonthly,
     retainedPercent: clampRetainedPercent(retainedPercent),
   };
 }

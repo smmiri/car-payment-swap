@@ -10,7 +10,7 @@ export default function Footer({ repoUrl }) {
 
   return (
     <footer className="border-t border-default bg-surface-card">
-      <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 text-xs text-muted sm:px-6">
+      <div className="content-width space-y-8 py-8 text-xs text-muted">
         <p className="max-w-3xl leading-relaxed">
           <Trans
             ns="legal"

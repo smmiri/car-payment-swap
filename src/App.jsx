@@ -22,7 +22,7 @@ export default function App() {
       <main id="main">
         <Hero />
         <Calculator />
-        <section id="methodology" className="mx-auto max-w-6xl px-4 pb-12 sm:px-6" aria-label="Methodology">
+        <section id="methodology" className="content-width pb-12" aria-label="Methodology">
           <Methodology repoUrl={REPO_URL} />
         </section>
       </main>

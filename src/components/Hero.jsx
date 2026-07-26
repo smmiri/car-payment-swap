@@ -5,7 +5,7 @@ export default function Hero() {
 
   return (
     <section id="top" className="hero-gradient">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+      <div className="content-width py-12 sm:py-16">
         <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
           {t("hero.badge")}
         </p>

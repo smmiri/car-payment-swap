@@ -7,9 +7,9 @@ export default function ComparisonTable({ results }) {
   const rows = results.scenarios || [];
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-default bg-surface-card">
+    <div className="overflow-x-auto panel-shell">
       <table className="min-w-full text-left text-sm">
-        <thead className="border-b border-default bg-surface-muted text-xs uppercase tracking-wide text-muted">
+        <thead className="border-b border-subtle bg-surface-muted text-xs uppercase tracking-wide text-muted">
           <tr>
             <th className="px-4 py-3 font-semibold">{t("table.scenario")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.tradeIn")}</th>
@@ -17,6 +17,7 @@ export default function ComparisonTable({ results }) {
             <th className="px-4 py-3 font-semibold">{t("table.cashAllIn")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.vsTarget")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.vsCurrent")}</th>
+            <th className="px-4 py-3 font-semibold">{t("table.ownership")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.economic")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.terminalEquity")}</th>
             <th className="px-4 py-3 font-semibold">{t("table.cashToClose")}</th>
@@ -56,6 +57,9 @@ export default function ComparisonTable({ results }) {
                   }`}
                 >
                   {fmt.formatSignedCurrency(s.vsCurrent)}
+                </td>
+                <td className="px-4 py-3 tabular-nums text-muted">
+                  {fmt.formatCurrency(s.ownershipMonthly)}
                 </td>
                 <td className="px-4 py-3 tabular-nums text-muted">
                   {fmt.formatCurrency(s.economicMonthly)}

@@ -4,7 +4,8 @@
  * Decision metric: cashAllInMonthly = loan payment + insurance + M&O + fuel/elec
  *   (per-scenario targetCashAllInMonthly drives vs-target and max-budget solve).
  * Informational: economicMonthly = net horizon TCO / ownershipHorizonMonths
- *   (exit equity / depreciation context — not used as the cash target).
+ *   (full cost of ownership). ownershipMonthly = economic − cash is the capital /
+ *   equity component. When cash all-in is tied, best ranking uses economicMonthly.
  * Auto loans: monthly compounding (see loan.js) — not Canadian mortgage semi-annual.
  */
 
@@ -95,21 +96,44 @@ export function tradeEquity(tradeInValue, remainingBalance) {
 }
 
 function attachHorizonMetrics(base, horizon) {
+  const economicMonthly = horizon.economicMonthly;
+  const cashAllInMonthly = base.cashAllInMonthly;
   return {
     ...base,
     ...horizon,
-    cashAllInMonthly: base.cashAllInMonthly,
-    economicMonthly: horizon.economicMonthly,
+    cashAllInMonthly,
+    economicMonthly,
+    ownershipMonthly: economicMonthly - cashAllInMonthly,
     netHorizonCost: horizon.netHorizonCost,
     horizonBreakdown: {
       openingEquity: horizon.openingEquity,
       upfrontCash: horizon.upfrontCash,
       loanPaymentsTotal: horizon.loanPaymentsTotal,
+      principalPaid: horizon.principalPaid,
+      interestPaid: horizon.interestPaid,
       operatingTotal: horizon.operatingTotal,
       terminalEquityCredit: horizon.terminalEquity,
     },
-    vsTarget: base.cashAllInMonthly - base.target,
+    vsTarget: cashAllInMonthly - base.target,
   };
+}
+
+/** Cash equality tolerance when ranking scenarios ($/mo). */
+export const CASH_TIE_EPS = 0.5;
+
+/**
+ * Rank scenarios for "best": prefer under-target, then lower cash all-in,
+ * then lower economic / cost of ownership when cash is tied.
+ */
+export function rankScenariosByPreference(scenarios) {
+  const list = (scenarios || []).slice();
+  const under = list.filter((s) => s.meetsTarget);
+  const pool = under.length ? under : list;
+  return pool.slice().sort((a, b) => {
+    const cashDiff = a.cashAllInMonthly - b.cashAllInMonthly;
+    if (Math.abs(cashDiff) > CASH_TIE_EPS) return cashDiff;
+    return a.economicMonthly - b.economicMonthly;
+  });
 }
 
 /**
@@ -487,6 +511,9 @@ export function simulateScenario(inputs, scenario) {
     operatingMonthly,
     cashAllInMonthly,
     economicMonthly: horizon.economicMonthly,
+    ownershipMonthly: horizon.economicMonthly - cashAllInMonthly,
+    principalMonthly: horizon.principalMonthly,
+    interestMonthly: horizon.interestMonthly,
     targetCashAllInMonthly: target,
     ownershipHorizonMonths: horizonMonths,
     vehicleAgeYears,
@@ -504,6 +531,8 @@ export function simulateScenario(inputs, scenario) {
       openingEquity: horizon.openingEquity,
       upfrontCash: horizon.upfrontCash,
       loanPaymentsTotal: horizon.loanPaymentsTotal,
+      principalPaid: horizon.principalPaid,
+      interestPaid: horizon.interestPaid,
       operatingTotal: horizon.operatingTotal,
       terminalEquityCredit: horizon.terminalEquity,
     },
@@ -757,10 +786,7 @@ export function compareScenarios(inputs) {
     ) + 0.5;
   }
 
-  const under = scenarios.filter((s) => s.meetsTarget);
-  const best = (under.length ? under : scenarios).slice().sort(
-    (a, b) => a.cashAllInMonthly - b.cashAllInMonthly,
-  )[0] || null;
+  const best = rankScenariosByPreference(scenarios)[0] || null;
 
   const warnings = [
     ...(maxBudget && !maxBudget.feasible && maxBudget.error === "OPERATING_EXCEEDS_TARGET"

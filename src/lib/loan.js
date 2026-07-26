@@ -156,3 +156,36 @@ export function remainingBalanceAtHorizon(
     totalPeriods,
   );
 }
+
+/**
+ * Principal and interest paid through the ownership horizon.
+ * principalPaid + interestPaid === paymentsThroughHorizon(...).
+ */
+export function principalAndInterestThroughHorizon(
+  principal,
+  aprPct,
+  termMonths,
+  freq,
+  horizonMonths,
+) {
+  const paymentsTotal = paymentsThroughHorizon(
+    principal,
+    aprPct,
+    termMonths,
+    freq,
+    horizonMonths,
+  );
+  if (!(principal > 0) || paymentsTotal <= 0) {
+    return { paymentsTotal: 0, principalPaid: 0, interestPaid: 0 };
+  }
+  const remaining = remainingBalanceAtHorizon(
+    principal,
+    aprPct,
+    termMonths,
+    freq,
+    horizonMonths,
+  );
+  const principalPaid = Math.max(0, Math.min(principal, principal - remaining));
+  const interestPaid = Math.max(0, paymentsTotal - principalPaid);
+  return { paymentsTotal, principalPaid, interestPaid };
+}

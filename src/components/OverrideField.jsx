@@ -2,7 +2,7 @@ import ModeToggle from "./ModeToggle.jsx";
 import InfoTip from "./InfoTip.jsx";
 
 /**
- * Number field with auto/manual mode toggle.
+ * Number field with auto/manual mode toggle — same chrome as InputField.
  */
 export default function OverrideField({
   label,
@@ -20,20 +20,15 @@ export default function OverrideField({
   const display = isManual ? manual : computed;
 
   return (
-    <div className="rounded-md border border-default bg-surface-card px-3 py-2.5">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div className="min-w-0">
+      <div className="mb-1.5 flex min-h-5 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="text-sm font-medium text-label">{label}</span>
+          <span className="field-label truncate">{label}</span>
           {help ? <InfoTip text={help} /> : null}
-          {isManual ? (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              Manual
-            </span>
-          ) : null}
         </div>
         <ModeToggle value={isManual ? "manual" : "auto"} onChange={onModeChange} />
       </div>
-      <div className="flex items-center rounded-md border input-shell">
+      <div className={`control-shell ${!isManual ? "bg-surface-inset" : ""}`}>
         <input
           type="number"
           value={Number.isFinite(display) ? display : ""}
@@ -45,13 +40,17 @@ export default function OverrideField({
           step={step}
           min={min}
           inputMode="decimal"
-          className="w-full bg-transparent px-3 py-2 text-right text-sm tabular-nums text-heading focus:outline-none disabled:opacity-70"
+          className="w-full bg-transparent px-3 text-right text-sm tabular-nums text-heading focus:outline-none disabled:cursor-not-allowed disabled:opacity-80"
         />
-        {suffix ? <span className="px-3 text-xs font-medium text-caption">{suffix}</span> : null}
+        {suffix ? <span className="shrink-0 px-3 text-xs font-medium text-caption">{suffix}</span> : null}
       </div>
       {!isManual && Number.isFinite(computed) ? (
-        <p className="mt-1 text-[11px] text-muted">Auto: {Math.round(computed * 100) / 100}</p>
-      ) : null}
+        <p className="field-hint">Auto: {Math.round(computed * 100) / 100}</p>
+      ) : (
+        <p className="field-hint invisible" aria-hidden>
+          &nbsp;
+        </p>
+      )}
     </div>
   );
 }

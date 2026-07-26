@@ -14,11 +14,10 @@ export default function SummaryCards({ results }) {
     ? `${t("summary.cashAtMax")}: ${fmt.formatCurrency(maxBudget.impliedCashAllInMonthly)}/mo`
     : null;
 
-  const bestTone =
-    best == null ? "neutral" : best.meetsTarget ? "positive" : "negative";
+  const bestTone = best == null ? "neutral" : best.meetsTarget ? "positive" : "negative";
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3">
       <StatCard
         label={t("summary.currentCash")}
         value={fmt.formatCurrency(current.cashAllInMonthly)}
@@ -37,7 +36,7 @@ export default function SummaryCards({ results }) {
         value={maxLabel}
         sublabel={maxSub}
         help={t("summary.maxBudgetHelp")}
-        tone="buy"
+        tone="neutral"
       />
       <StatCard
         label={t("summary.bestScenario")}
