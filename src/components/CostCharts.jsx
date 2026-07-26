@@ -30,57 +30,77 @@ const CASH_SERIES = [
   { key: "fuel", color: "#059669", label: "Fuel/elec" },
 ];
 
+function toHorizonRow(s, name) {
+  const b = s?.horizonBreakdown || {};
+  const opening = Math.round(b.openingEquity || 0);
+  const openingEquity = Math.abs(opening);
+  const upfrontCash = Math.round(b.upfrontCash || 0);
+  const loanPayments = Math.round(b.loanPaymentsTotal || 0);
+  const operating = Math.round(b.operatingTotal || 0);
+  const exitEquity = Math.round(Math.max(0, b.terminalEquityCredit || 0));
+  return {
+    name,
+    openingEquity,
+    upfrontCash,
+    loanPayments,
+    operating,
+    exitEquity,
+    totalCost: openingEquity + upfrontCash + loanPayments + operating,
+    net: Math.round(s?.netHorizonCost || 0),
+  };
+}
+
+function toCashRow(s, name) {
+  return {
+    name,
+    loan: Math.round(s?.loanMonthly || 0),
+    insurance: Math.round(s?.insurance || 0),
+    mo: Math.round(s?.mo || 0),
+    fuel: Math.round(s?.fuel || 0),
+    total: Math.round(s?.cashAllInMonthly || 0),
+  };
+}
+
 export default function CostCharts({ results }) {
   const { t } = useTranslation();
   const fmt = useFormat();
   const gid = useId().replace(/:/g, "");
+  const currentName = t("calculator.current");
 
-  const horizonBreakdown = useMemo(
-    () =>
-      (results.scenarios || []).map((s) => {
-        const b = s.horizonBreakdown || {};
-        const opening = Math.round(b.openingEquity || 0);
-        const openingEquity = Math.abs(opening);
-        const upfrontCash = Math.round(b.upfrontCash || 0);
-        const loanPayments = Math.round(b.loanPaymentsTotal || 0);
-        const operating = Math.round(b.operatingTotal || 0);
-        const exitEquity = Math.round(Math.max(0, b.terminalEquityCredit || 0));
-        return {
-          name: s.name,
-          openingEquity,
-          upfrontCash,
-          loanPayments,
-          operating,
-          exitEquity,
-          totalCost: openingEquity + upfrontCash + loanPayments + operating,
-          net: Math.round(s.netHorizonCost || 0),
-        };
-      }),
-    [results.scenarios],
-  );
+  const horizonBreakdown = useMemo(() => {
+    const rows = [];
+    if (results.current) rows.push(toHorizonRow(results.current, currentName));
+    for (const s of results.scenarios || []) rows.push(toHorizonRow(s, s.name));
+    return rows;
+  }, [results.current, results.scenarios, currentName]);
 
-  const cashBreakdown = useMemo(
-    () =>
-      (results.scenarios || []).map((s) => ({
-        name: s.name,
-        loan: Math.round(s.loanMonthly),
-        insurance: Math.round(s.insurance),
-        mo: Math.round(s.mo),
-        fuel: Math.round(s.fuel),
-        total: Math.round(s.cashAllInMonthly),
-      })),
-    [results.scenarios],
-  );
+  const cashBreakdown = useMemo(() => {
+    const rows = [];
+    if (results.current) rows.push(toCashRow(results.current, currentName));
+    for (const s of results.scenarios || []) rows.push(toCashRow(s, s.name));
+    return rows;
+  }, [results.current, results.scenarios, currentName]);
 
-  const savings = useMemo(
-    () =>
-      (results.scenarios || []).map((s) => ({
+  const savings = useMemo(() => {
+    const rows = [];
+    if (results.current) {
+      rows.push({
+        name: currentName,
+        savings: 0,
+        positive: true,
+        isCurrent: true,
+      });
+    }
+    for (const s of results.scenarios || []) {
+      rows.push({
         name: s.name,
         savings: Math.round(s.vsCurrent),
         positive: s.vsCurrent >= 0,
-      })),
-    [results.scenarios],
-  );
+        isCurrent: false,
+      });
+    }
+    return rows;
+  }, [results.current, results.scenarios, currentName]);
 
   const currencyTick = (v) => {
     const n = Number(v);
@@ -89,7 +109,7 @@ export default function CostCharts({ results }) {
   };
 
   const axisTick = { fontSize: 11, fill: "currentColor", opacity: 0.55 };
-  const manyScenarios = horizonBreakdown.length > 2;
+  const manyScenarios = horizonBreakdown.length > 3;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -121,7 +141,7 @@ export default function CostCharts({ results }) {
             <YAxis
               type="category"
               dataKey="name"
-              width={112}
+              width={120}
               tick={axisTick}
               axisLine={false}
               tickLine={false}
@@ -240,7 +260,13 @@ export default function CostCharts({ results }) {
               {savings.map((row) => (
                 <Cell
                   key={row.name}
-                  fill={row.positive ? `url(#${gid}-save)` : `url(#${gid}-cost)`}
+                  fill={
+                    row.isCurrent
+                      ? `url(#${gid}-base)`
+                      : row.positive
+                        ? `url(#${gid}-save)`
+                        : `url(#${gid}-cost)`
+                  }
                 />
               ))}
               <LabelList
@@ -269,6 +295,10 @@ function ChartGradients({ id }) {
         <linearGradient id={`${id}-cost`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#fb7185" />
           <stop offset="100%" stopColor="#e11d48" />
+        </linearGradient>
+        <linearGradient id={`${id}-base`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#94a3b8" />
+          <stop offset="100%" stopColor="#64748b" />
         </linearGradient>
       </defs>
     </svg>
@@ -339,7 +369,21 @@ function StackTooltip({ active, payload, label, fmt, totalKey, totalLabel = "Tot
 
 function SavingsTooltip({ active, payload, label, fmt, t }) {
   if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
   const v = payload[0].value;
+  if (row?.isCurrent) {
+    return (
+      <div className="rounded-xl border border-default bg-surface-card px-3 py-2 shadow-lg">
+        <div className="text-xs font-semibold text-heading">{label}</div>
+        <div className="mt-1 text-sm font-semibold tabular-nums text-slate-600 dark:text-slate-300">
+          {fmt.formatSignedCurrency(0)}
+          <span className="ms-1 text-[11px] font-normal text-muted">
+            {t("charts.vsCurrentBaseline")}
+          </span>
+        </div>
+      </div>
+    );
+  }
   const better = v >= 0;
   return (
     <div className="rounded-xl border border-default bg-surface-card px-3 py-2 shadow-lg">
