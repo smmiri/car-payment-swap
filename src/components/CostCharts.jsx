@@ -1,12 +1,10 @@
-import { useId, useMemo } from "react";
+import { useMemo } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   LabelList,
   Legend,
-  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -32,12 +30,14 @@ const CASH_SERIES = [
 
 function toHorizonRow(s, name) {
   const b = s?.horizonBreakdown || {};
-  const opening = Math.round(b.openingEquity || 0);
+  const opening = Math.round(b.openingEquity ?? s?.openingEquity ?? 0);
   const openingEquity = Math.abs(opening);
-  const upfrontCash = Math.round(b.upfrontCash || 0);
-  const loanPayments = Math.round(b.loanPaymentsTotal || 0);
-  const operating = Math.round(b.operatingTotal || 0);
-  const exitEquity = Math.round(Math.max(0, b.terminalEquityCredit || 0));
+  const upfrontCash = Math.round(b.upfrontCash ?? s?.upfrontCash ?? 0);
+  const loanPayments = Math.round(b.loanPaymentsTotal ?? s?.loanPaymentsTotal ?? 0);
+  const operating = Math.round(b.operatingTotal ?? s?.operatingTotal ?? 0);
+  const exitEquity = Math.round(
+    Math.max(0, b.terminalEquityCredit ?? s?.terminalEquity ?? 0),
+  );
   return {
     name,
     openingEquity,
@@ -64,7 +64,6 @@ function toCashRow(s, name) {
 export default function CostCharts({ results }) {
   const { t } = useTranslation();
   const fmt = useFormat();
-  const gid = useId().replace(/:/g, "");
   const currentName = t("calculator.current");
 
   const horizonBreakdown = useMemo(() => {
@@ -81,27 +80,6 @@ export default function CostCharts({ results }) {
     return rows;
   }, [results.current, results.scenarios, currentName]);
 
-  const savings = useMemo(() => {
-    const rows = [];
-    if (results.current) {
-      rows.push({
-        name: currentName,
-        savings: 0,
-        positive: true,
-        isCurrent: true,
-      });
-    }
-    for (const s of results.scenarios || []) {
-      rows.push({
-        name: s.name,
-        savings: Math.round(s.vsCurrent),
-        positive: s.vsCurrent >= 0,
-        isCurrent: false,
-      });
-    }
-    return rows;
-  }, [results.current, results.scenarios, currentName]);
-
   const currencyTick = (v) => {
     const n = Number(v);
     if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
@@ -113,8 +91,6 @@ export default function CostCharts({ results }) {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <ChartGradients id={gid} />
-
       <ChartCard
         title={t("calculator.chartHorizon")}
         subtitle={t("calculator.chartHorizonHint")}
@@ -220,88 +196,7 @@ export default function CostCharts({ results }) {
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
-
-      <ChartCard
-        title={t("calculator.chartSavings")}
-        subtitle={t("calculator.chartSavingsHint")}
-        className="lg:col-span-2"
-      >
-        <ResponsiveContainer width="100%" height={230}>
-          <BarChart
-            data={savings}
-            margin={{ top: 28, right: 16, left: 0, bottom: 4 }}
-            barCategoryGap="34%"
-          >
-            <CartesianGrid
-              strokeDasharray="2 6"
-              vertical={false}
-              className="stroke-slate-200/80 dark:stroke-slate-700/80"
-            />
-            <XAxis dataKey="name" tick={axisTick} axisLine={false} tickLine={false} />
-            <YAxis
-              tick={axisTick}
-              tickFormatter={currencyTick}
-              axisLine={false}
-              tickLine={false}
-              width={48}
-            />
-            <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.28} strokeWidth={1.5} />
-            <Tooltip
-              cursor={{ fill: "rgba(15, 23, 42, 0.045)" }}
-              content={<SavingsTooltip fmt={fmt} t={t} />}
-            />
-            <Bar
-              dataKey="savings"
-              name={t("charts.economicSavings")}
-              radius={10}
-              maxBarSize={72}
-              animationDuration={850}
-            >
-              {savings.map((row) => (
-                <Cell
-                  key={row.name}
-                  fill={
-                    row.isCurrent
-                      ? `url(#${gid}-base)`
-                      : row.positive
-                        ? `url(#${gid}-save)`
-                        : `url(#${gid}-cost)`
-                  }
-                />
-              ))}
-              <LabelList
-                dataKey="savings"
-                position="top"
-                offset={8}
-                formatter={(v) => fmt.formatSignedCurrency(v)}
-                className="fill-slate-600 text-[11px] font-semibold dark:fill-slate-300"
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
     </div>
-  );
-}
-
-function ChartGradients({ id }) {
-  return (
-    <svg width={0} height={0} className="absolute" aria-hidden>
-      <defs>
-        <linearGradient id={`${id}-save`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#34d399" />
-          <stop offset="100%" stopColor="#059669" />
-        </linearGradient>
-        <linearGradient id={`${id}-cost`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#fb7185" />
-          <stop offset="100%" stopColor="#e11d48" />
-        </linearGradient>
-        <linearGradient id={`${id}-base`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#94a3b8" />
-          <stop offset="100%" stopColor="#64748b" />
-        </linearGradient>
-      </defs>
-    </svg>
   );
 }
 
@@ -363,41 +258,6 @@ function StackTooltip({ active, payload, label, fmt, totalKey, totalLabel = "Tot
           <span className="tabular-nums">{fmt.formatCurrency(total)}</span>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function SavingsTooltip({ active, payload, label, fmt, t }) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0]?.payload;
-  const v = payload[0].value;
-  if (row?.isCurrent) {
-    return (
-      <div className="rounded-xl border border-default bg-surface-card px-3 py-2 shadow-lg">
-        <div className="text-xs font-semibold text-heading">{label}</div>
-        <div className="mt-1 text-sm font-semibold tabular-nums text-slate-600 dark:text-slate-300">
-          {fmt.formatSignedCurrency(0)}
-          <span className="ms-1 text-[11px] font-normal text-muted">
-            {t("charts.vsCurrentBaseline")}
-          </span>
-        </div>
-      </div>
-    );
-  }
-  const better = v >= 0;
-  return (
-    <div className="rounded-xl border border-default bg-surface-card px-3 py-2 shadow-lg">
-      <div className="text-xs font-semibold text-heading">{label}</div>
-      <div
-        className={`mt-1 text-sm font-semibold tabular-nums ${
-          better ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-        }`}
-      >
-        {fmt.formatSignedCurrency(v)}
-        <span className="ms-1 text-[11px] font-normal text-muted">
-          {better ? t("charts.vsCurrentBetter") : t("charts.vsCurrentWorse")}
-        </span>
-      </div>
     </div>
   );
 }

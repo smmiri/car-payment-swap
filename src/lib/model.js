@@ -100,6 +100,14 @@ function attachHorizonMetrics(base, horizon) {
     ...horizon,
     cashAllInMonthly: base.cashAllInMonthly,
     economicMonthly: horizon.economicMonthly,
+    netHorizonCost: horizon.netHorizonCost,
+    horizonBreakdown: {
+      openingEquity: horizon.openingEquity,
+      upfrontCash: horizon.upfrontCash,
+      loanPaymentsTotal: horizon.loanPaymentsTotal,
+      operatingTotal: horizon.operatingTotal,
+      terminalEquityCredit: horizon.terminalEquity,
+    },
     vsTarget: base.cashAllInMonthly - base.target,
   };
 }

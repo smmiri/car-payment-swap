@@ -35,8 +35,6 @@
     "chartHorizonHint": "Where money goes over the ownership horizon — exit equity shown as recovered value.",
     "chartBreakdown": "Cash monthly breakdown",
     "chartBreakdownHint": "Liquidity view: scheduled payment plus operating costs.",
-    "chartSavings": "Cash savings vs current",
-    "chartSavingsHint": "Positive = lower cash all-in than keeping your car.",
     "exitValue": "Est. exit value",
     "ofPurchasePrice": "of purchase price at horizon",
     "ageAware": "{{age}}-yr-old curve",
@@ -91,8 +89,7 @@
     "exitEquity": "Exit equity",
     "economicSavings": "Economic savings",
     "vsCurrentBetter": "/ mo better",
-    "vsCurrentWorse": "/ mo worse",
-    "vsCurrentBaseline": "baseline (keep)"
+    "vsCurrentWorse": "/ mo worse"
   },
   "methodology": {
     "title": "How the math works",
