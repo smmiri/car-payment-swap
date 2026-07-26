@@ -17,6 +17,13 @@
     "assumptionsHint": "Change values below. Assumptions save in this browser automatically. Hover",
     "helpIcon": "i",
     "helpSuffix": "for help on each field.",
+    "share": "Share link",
+    "shareCopyPrompt": "Copy this share link:",
+    "shareLoaded": "Loaded shared inputs. Results were recalculated from those assumptions — nothing is sent to a server.",
+    "shareStatus": {
+      "copied": "Share link copied. Anyone with the link can open your inputs and see recalculated results.",
+      "copiedLong": "Share link copied. It is long — some apps may truncate it. Prefer pasting into a browser address bar."
+    },
     "reset": "Reset to defaults",
     "results": "Results",
     "resultsHint": "Updates live as you change inputs above.",

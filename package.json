@@ -23,7 +23,7 @@
     "dev": "vite",
     "build": "vite build && node scripts/configure-site-url.mjs",
     "preview": "vite preview",
-    "test": "node --test src/lib/loan.test.js src/lib/horizon-cost.test.js src/lib/vehicle-taxes.test.js src/lib/ev-incentives.test.js src/lib/operating-costs.test.js src/lib/overrides.test.js src/lib/model.test.js src/lib/persist-inputs.test.js src/lib/theme.test.js"
+    "test": "node --test src/lib/loan.test.js src/lib/horizon-cost.test.js src/lib/vehicle-taxes.test.js src/lib/ev-incentives.test.js src/lib/operating-costs.test.js src/lib/overrides.test.js src/lib/model.test.js src/lib/persist-inputs.test.js src/lib/share-inputs.test.js src/lib/theme.test.js"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",

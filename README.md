@@ -14,6 +14,7 @@ Open-source Canadian **vehicle payment swap** calculator. Compare keeping your f
 - Per-field auto/manual overrides
 - Reverse **max affordable purchase price** (binary search)
 - Input persistence (`smc_inputs` localStorage + cookie when small enough)
+- Share link (`#share=…`) encodes inputs in the URL; opening recalculates results client-side
 
 ## License
 

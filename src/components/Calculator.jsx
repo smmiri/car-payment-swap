@@ -8,6 +8,11 @@ import {
   writeInputsToCookie,
 } from "../lib/persist-inputs.js";
 import {
+  buildShareUrl,
+  consumeShareFromLocation,
+  SHARE_URL_SOFT_MAX,
+} from "../lib/share-inputs.js";
+import {
   compareScenarios,
   terminalVehicleValue,
   suggestedRetainedPercent,
@@ -27,8 +32,15 @@ import { useFormat } from "../hooks/useFormat.js";
 
 const SAVE_DEBOUNCE_MS = 400;
 
-function loadInitialInputs() {
-  return loadInputsFromCookie() ?? structuredClone(DEFAULT_INPUTS);
+function loadBootState() {
+  const shared = consumeShareFromLocation();
+  if (shared) {
+    return { inputs: shared, fromShare: true };
+  }
+  return {
+    inputs: loadInputsFromCookie() ?? structuredClone(DEFAULT_INPUTS),
+    fromShare: false,
+  };
 }
 
 export default function Calculator() {
@@ -36,13 +48,28 @@ export default function Calculator() {
   const { t: tProvinces } = useTranslation("provinces");
   const FIELD_META = useFieldMeta();
   const fmt = useFormat();
-  const [inputs, setInputs] = useState(loadInitialInputs);
+  const [boot] = useState(loadBootState);
+  const [inputs, setInputs] = useState(boot.inputs);
+  const [shareBanner, setShareBanner] = useState(boot.fromShare);
+  const [shareStatus, setShareStatus] = useState(null);
   const results = useMemo(() => compareScenarios(inputs), [inputs]);
 
   useEffect(() => {
     const id = window.setTimeout(() => writeInputsToCookie(inputs), SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
   }, [inputs]);
+
+  useEffect(() => {
+    if (!shareBanner) return undefined;
+    const id = window.setTimeout(() => setShareBanner(false), 8_000);
+    return () => window.clearTimeout(id);
+  }, [shareBanner]);
+
+  useEffect(() => {
+    if (!shareStatus) return undefined;
+    const id = window.setTimeout(() => setShareStatus(null), 4_000);
+    return () => window.clearTimeout(id);
+  }, [shareStatus]);
 
   const activeIndex = Math.max(
     0,
@@ -83,6 +110,22 @@ export default function Calculator() {
   const handleReset = () => {
     clearInputsCookie();
     setInputs(structuredClone(DEFAULT_INPUTS));
+    setShareBanner(false);
+  };
+
+  const handleShare = async () => {
+    const url = buildShareUrl(inputs, `${window.location.origin}${window.location.pathname}`);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        window.prompt(t("calculator.shareCopyPrompt"), url);
+      }
+      setShareStatus(url.length > SHARE_URL_SOFT_MAX ? "copiedLong" : "copied");
+    } catch {
+      window.prompt(t("calculator.shareCopyPrompt"), url);
+      setShareStatus("copied");
+    }
   };
 
   const addScenario = () => {
@@ -149,14 +192,40 @@ export default function Calculator() {
             {t("calculator.helpSuffix")}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="rounded-md border border-default px-3 py-1.5 text-xs font-medium text-label hover:bg-surface-inset"
-        >
-          {t("calculator.reset")}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleShare}
+            className="rounded-md border border-default bg-surface-card px-3 py-1.5 text-xs font-medium text-label hover:bg-surface-inset"
+          >
+            {t("calculator.share")}
+          </button>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="rounded-md border border-default px-3 py-1.5 text-xs font-medium text-label hover:bg-surface-inset"
+          >
+            {t("calculator.reset")}
+          </button>
+        </div>
       </header>
+
+      {shareBanner ? (
+        <div
+          className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100"
+          role="status"
+        >
+          {t("calculator.shareLoaded")}
+        </div>
+      ) : null}
+      {shareStatus ? (
+        <div
+          className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-100"
+          role="status"
+        >
+          {t(`calculator.shareStatus.${shareStatus}`)}
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         {/* Global */}
